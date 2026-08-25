@@ -1,9 +1,9 @@
 <?php
 
 declare(strict_types=1);
+use App\Curator\MountedGlideUrlProvider;
 use Awcodes\Curator\Enums\PreviewableExtensions;
 use Awcodes\Curator\Models\Media;
-use Awcodes\Curator\Providers\GlideUrlProvider;
 use Awcodes\Curator\Resources\Media\MediaResource;
 use Awcodes\Curator\Resources\Media\Pages\CreateMedia;
 use Awcodes\Curator\Resources\Media\Pages\EditMedia;
@@ -53,5 +53,5 @@ return [
             'table' => MediaTable::class,
         ],
     ],
-    'url_provider' => GlideUrlProvider::class,
+    'url_provider' => MountedGlideUrlProvider::class,
 ];
