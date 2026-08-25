@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Actions\Quizzes\DuplicateQuiz;
 use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Ai\Contracts\QuizDefinitionGenerator;
+use App\Filament\Pages\ManageBrandingSettings;
+use App\Filament\Pages\ManageReportEmailSettings;
+use App\Filament\Pages\OperationalSettings;
 use App\Models\Quiz;
 use App\Models\QuizRevision;
 use App\Models\User;
@@ -94,5 +97,15 @@ class AdminCompletionTest extends TestCase
             ->assertOk()
             ->assertSee('Report email templates')
             ->assertSee('Permitted placeholders');
+    }
+
+    public function test_settings_pages_share_an_ordered_settings_menu(): void
+    {
+        $this->assertSame('Settings', ManageBrandingSettings::getNavigationGroup());
+        $this->assertSame('Settings', ManageReportEmailSettings::getNavigationGroup());
+        $this->assertSame('Settings', OperationalSettings::getNavigationGroup());
+        $this->assertSame(1, ManageBrandingSettings::getNavigationSort());
+        $this->assertSame(2, ManageReportEmailSettings::getNavigationSort());
+        $this->assertSame(3, OperationalSettings::getNavigationSort());
     }
 }

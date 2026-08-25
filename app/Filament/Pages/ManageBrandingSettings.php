@@ -14,6 +14,10 @@ class ManageBrandingSettings extends SettingsPage
 {
     protected static string $settings = BrandingSettings::class;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
+
+    protected static ?int $navigationSort = 1;
+
     protected static ?string $navigationLabel = 'Branding & design';
 
     protected static ?string $title = 'Branding & design';

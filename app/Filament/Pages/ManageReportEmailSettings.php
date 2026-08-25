@@ -13,6 +13,10 @@ class ManageReportEmailSettings extends SettingsPage
 {
     protected static string $settings = ReportEmailSettings::class;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
+
+    protected static ?int $navigationSort = 2;
+
     protected static ?string $navigationLabel = 'Report email templates';
 
     protected static ?string $title = 'Report email templates';
