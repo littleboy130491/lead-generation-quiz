@@ -24,7 +24,7 @@ class ManageBrandingSettings extends SettingsPage
 
     public static function canAccess(): bool
     {
-        return auth()->check();
+        return auth()->user()?->hasRole('admin') ?? false;
     }
 
     public function form(Schema $schema): Schema
@@ -42,6 +42,9 @@ class ManageBrandingSettings extends SettingsPage
                 Textarea::make('additional_css')->rows(10)->maxLength(20000)->rules(['not_regex:/@import|url\\s*\\(|expression\\s*\\(|javascript:|<|>/i'])->helperText('Public quiz CSS only. External imports, URLs, and HTML are rejected.'),
                 Textarea::make('additional_js')->rows(10)->maxLength(20000)->rules(['not_regex:/<\\/?script|<\\/?style/i'])->helperText('Trusted administrator JavaScript, loaded only on public quiz pages. Do not paste <script> tags or secrets.'),
             ])->columns(2),
+            Section::make('Thank-you page')->description('Static HTML shown after a completed quiz. It is limited to a safe HTML subset and is never interpreted as Blade, PHP, JavaScript, or respondent data.')->schema([
+                Textarea::make('completion_html')->required()->rows(14)->maxLength(40000)->helperText('Allowed: headings, paragraphs, lists, strong/emphasis, links, images, divs and spans. Scripts, forms, event attributes, inline styles, iframes, and unsafe URLs are removed when shown.'),
+            ]),
         ]);
     }
 }

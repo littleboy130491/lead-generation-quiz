@@ -26,6 +26,8 @@ class BrandingSettings extends Settings
 
     public string $additional_js;
 
+    public string $completion_html;
+
     public static function group(): string
     {
         return 'branding';

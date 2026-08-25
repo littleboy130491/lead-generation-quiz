@@ -6,6 +6,9 @@ use App\Actions\Submissions\FinalizeSubmission;
 use App\Enums\SubmissionStatus;
 use App\Models\Quiz;
 use App\Models\Submission;
+use App\Services\CompletionHtmlSanitizer;
+use App\Settings\BrandingSettings;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -26,10 +29,14 @@ class QuizContactController extends Controller
         return redirect()->route('quizzes.complete', ['quiz' => $submission->quiz, 'submission' => $submission]);
     }
 
-    public function complete(Quiz $quiz, Submission $submission)
+    public function complete(Quiz $quiz, Submission $submission, BrandingSettings $branding, CompletionHtmlSanitizer $completionHtml): View
     {
         abort_unless($submission->quiz_id === $quiz->id && $submission->status === SubmissionStatus::Completed, 403);
 
-        return view('quiz.complete', compact('quiz', 'submission'));
+        return view('quiz.complete', [
+            'quiz' => $quiz,
+            'submission' => $submission,
+            'completionHtml' => $completionHtml->sanitize($branding->completion_html),
+        ]);
     }
 }

@@ -483,6 +483,7 @@ Implement:
 - Ordered provider/model chains separately for quiz and report generation.
 - Cheap connection and structured-output tests with redacted failures.
 - Design token editor and additional CSS.
+- Administrator-only static thank-you HTML with a server-side structural allowlist; it must not evaluate Blade/PHP/JavaScript or interpolate respondent data.
 - Email templates and preview.
 - Prompt templates/version labels.
 - Resume, retention, retry, timeout, and spam settings.
