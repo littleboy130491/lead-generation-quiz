@@ -33,6 +33,15 @@ class UserFactory extends Factory
         ];
     }
 
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            if (app()->runningUnitTests()) {
+                $user->assignRole('admin');
+            }
+        });
+    }
+
     /**
      * Indicate that the model's email address should be unverified.
      */

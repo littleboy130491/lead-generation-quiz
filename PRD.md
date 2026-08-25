@@ -93,6 +93,7 @@ A respondent who authenticates passwordlessly by an email OTP and can view quiz 
 - Rate limits, honeypot, Turnstile, validation, and basic spam controls.
 - Configurable design tokens, additional CSS, email templates, and AI prompts.
 - A server-to-server Bearer-token API for AI-assisted quiz-draft creation and optional immutable publication.
+- Filament Shield role-based administration, user-role assignment, and filtered CSV/XLSX table exports for quizzes and submissions.
 
 ### Deferred
 
@@ -601,6 +602,7 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 - Corrected the Filament quiz-builder schema to flatten reusable visibility components rather than passing a nested array; an authenticated edit-route regression now protects existing authored quizzes and Livewire builder actions.
 - Added the versioned, rate-limited, server-to-server quiz-generation API with fail-closed environment Bearer-token authentication, allowlisted request validation, immutable generation auditing, optional publication, normalized provider errors, regression tests, and comprehensive operational reference documentation.
 - Added Spatie Laravel Settings and Filament settings pages for public-quiz branding/design (logo, colors, CSS, trusted JavaScript) and report email templates; settings are database-backed, migrated, rendered at runtime, and documented as non-secret administrator controls.
+- Added Filament Shield/Spatie Permission, Shield-generated policies, a User resource with role assignment, and idempotent `admin`, `quiz_manager`, and `submission_manager` role seeding. Added Filament Excel filtered/selected quiz and submission exports with administrator-selected CSV/XLSX output.
 
 ### 2026-08-25 — Cycle-10 runtime settings and operational workflows
 

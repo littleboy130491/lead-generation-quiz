@@ -17,6 +17,9 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
+use pxlrbt\FilamentExcel\Actions\Tables\ExportAction;
+use pxlrbt\FilamentExcel\Actions\Tables\ExportBulkAction;
+use pxlrbt\FilamentExcel\Exports\ExcelExport;
 
 class SubmissionsTable
 {
@@ -26,6 +29,8 @@ class SubmissionsTable
             TextColumn::make('public_id')->label('Submission')->searchable()->toggleable(), TextColumn::make('quiz.name')->label('Quiz')->searchable(), TextColumn::make('email')->searchable(), TextColumn::make('status')->badge(), TextColumn::make('first_touch_context.client.browser')->label('First browser')->toggleable(), TextColumn::make('latest_touch_context.client.device')->label('Latest device')->toggleable(), TextColumn::make('quizRevision.version')->label('Revision'), TextColumn::make('analyses_count')->counts('analyses')->label('Analyses'), TextColumn::make('completed_at')->dateTime()->sortable(),
         ])->filters([
             SelectFilter::make('status')->options(collect(SubmissionStatus::cases())->mapWithKeys(fn ($status) => [$status->value => $status->value])->all()), SelectFilter::make('first_touch_context->client->browser')->label('First browser')->options(['Chrome' => 'Chrome', 'Edge' => 'Edge', 'Firefox' => 'Firefox', 'Safari' => 'Safari', 'Other' => 'Other']), SelectFilter::make('latest_touch_context->client->device')->label('Latest device')->options(['desktop' => 'Desktop', 'mobile' => 'Mobile', 'tablet' => 'Tablet']),
+        ])->headerActions([
+            ExportAction::make('exportFiltered')->label('Export filtered')->exports([ExcelExport::make()->fromTable()->askForFilename()->askForWriterType()]),
         ])->recordActions([
             EditAction::make()->label('View frozen record'),
             Action::make('reanalyze')->requiresConfirmation()->visible(fn (Submission $record): bool => $record->status === SubmissionStatus::Completed)->action(fn (Submission $record) => app(RequestAnalysis::class)->handle($record, auth()->id())),
@@ -47,6 +52,7 @@ class SubmissionsTable
                 }, 'submission-'.$record->public_id.'.csv', ['Content-Type' => 'text/csv']);
             }),
         ])->toolbarActions([BulkActionGroup::make([
+            ExportBulkAction::make('exportSelected')->label('Export selected')->exports([ExcelExport::make()->fromTable()->askForFilename()->askForWriterType()]),
             BulkAction::make('reanalyze')->requiresConfirmation()->action(fn (Collection $records) => $records->filter(fn (Submission $record) => $record->status === SubmissionStatus::Completed)->each(fn (Submission $record) => app(RequestAnalysis::class)->handle($record, auth()->id()))),
             BulkAction::make('generateAndSend')->label('Generate and send')->requiresConfirmation()->action(fn (Collection $records) => $records->filter(fn (Submission $record) => $record->status === SubmissionStatus::Completed)->each(fn (Submission $record) => app(RequestAnalysis::class)->handle($record, auth()->id(), true))),
             BulkAction::make('resendLatest')->label('Resend latest completed analysis')->requiresConfirmation()->action(fn (Collection $records) => $records->each(function (Submission $record): void {
