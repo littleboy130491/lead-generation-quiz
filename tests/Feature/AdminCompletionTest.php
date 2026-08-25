@@ -82,4 +82,17 @@ class AdminCompletionTest extends TestCase
             ->assertSee('Quiz AI provider chain')
             ->assertSee('Additional CSS');
     }
+
+    public function test_spatie_branding_and_email_settings_pages_render_for_an_administrator(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/admin/manage-branding-settings')
+            ->assertOk()
+            ->assertSee('Brand identity');
+
+        $this->get('/admin/manage-report-email-settings')
+            ->assertOk()
+            ->assertSee('Report email templates')
+            ->assertSee('Permitted placeholders');
+    }
 }

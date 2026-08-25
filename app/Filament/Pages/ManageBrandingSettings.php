@@ -4,10 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Settings\BrandingSettings;
 use Filament\Forms\Components\ColorPicker;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\SettingsPage;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class ManageBrandingSettings extends SettingsPage
