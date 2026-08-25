@@ -2,15 +2,24 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('curator', function (Blueprint $table) {
-            $table->id();
+        if (! Schema::hasTable('curator') || DB::table('curator')->exists()) {
+            return;
+        }
 
+        // The original local install used a UUID primary key while Curator's
+        // model expects an auto-incrementing numeric key. No media records
+        // exist, so recreate the empty table safely with the supported schema.
+        Schema::drop('curator');
+
+        Schema::create('curator', function (Blueprint $table): void {
+            $table->id();
             $table->string('disk');
             $table->string('directory')->nullable();
             $table->string('visibility')->default('public');
@@ -29,13 +38,12 @@ return new class extends Migration
             $table->text('exif')->nullable();
             $table->longText('curations')->nullable();
             $table->unsignedBigInteger('tenant_id')->nullable();
-
             $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('curator');
+        // Do not attempt a destructive rollback of media storage metadata.
     }
 };
