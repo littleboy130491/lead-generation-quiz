@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Security\Turnstile\TurnstileVerification;
 use App\Security\Turnstile\TurnstileVerifier;
 use App\Settings\ApplicationSettings;
+use App\Settings\ReportEmailSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Validation\ValidationException;
@@ -36,7 +37,11 @@ class CycleTenRuntimeAndOperationsTest extends TestCase
         $settings = app(ApplicationSettings::class);
         $settings->put('ai.report', [['provider' => 'runtime-provider', 'model' => 'runtime-model']]);
         $settings->put('prompts', ['quiz_version' => 'v1', 'quiz_template' => 'quiz', 'report_version' => 'runtime-v2', 'report_template' => 'Use this runtime instruction.']);
-        $settings->put('report.email', ['subject' => 'Report for {{email}}', 'html' => '<h1>{{report.executive_summary}}</h1>', 'text' => 'Summary: {{report.executive_summary}}']);
+        $email = app(ReportEmailSettings::class);
+        $email->subject = 'Report for {{email}}';
+        $email->html = '<h1>{{report.executive_summary}}</h1>';
+        $email->text = 'Summary: {{report.executive_summary}}';
+        $email->save();
         $submission = $this->submission(['status' => SubmissionStatus::AwaitingContact]);
 
         app(FinalizeSubmission::class)->handle($submission, ['email' => 'lead@example.test']);

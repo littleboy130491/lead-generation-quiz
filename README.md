@@ -1,6 +1,6 @@
 # Lead Generation Quiz Platform
 
-Laravel 13 / Filament 5 application for versioned lead-generation quizzes, resumable anonymous responses, queued AI analysis, and auditable report delivery. Product behavior is defined by [PRD.md](PRD.md); implementation sequencing is in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md); the server-to-server quiz generation contract is in [docs/QUIZ_GENERATION_API.md](docs/QUIZ_GENERATION_API.md).
+Laravel 13 / Filament 5 application for versioned lead-generation quizzes, resumable anonymous responses, queued AI analysis, and auditable report delivery. Product behavior is defined by [PRD.md](PRD.md); implementation sequencing is in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md); the server-to-server quiz generation contract is in [docs/QUIZ_GENERATION_API.md](docs/QUIZ_GENERATION_API.md); and admin customization controls are in [docs/ADMIN_SETTINGS.md](docs/ADMIN_SETTINGS.md).
 
 ## Prerequisites
 

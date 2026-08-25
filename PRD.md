@@ -600,6 +600,7 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 - Preserved the HTTPS scheme through the Cloudflare/Nginx FastCGI boundary so Filament/Livewire generates an HTTPS update endpoint under the public subdirectory rather than a browser-blocked HTTP request.
 - Corrected the Filament quiz-builder schema to flatten reusable visibility components rather than passing a nested array; an authenticated edit-route regression now protects existing authored quizzes and Livewire builder actions.
 - Added the versioned, rate-limited, server-to-server quiz-generation API with fail-closed environment Bearer-token authentication, allowlisted request validation, immutable generation auditing, optional publication, normalized provider errors, regression tests, and comprehensive operational reference documentation.
+- Added Spatie Laravel Settings and Filament settings pages for public-quiz branding/design (logo, colors, CSS, trusted JavaScript) and report email templates; settings are database-backed, migrated, rendered at runtime, and documented as non-secret administrator controls.
 
 ### 2026-08-25 — Cycle-10 runtime settings and operational workflows
 

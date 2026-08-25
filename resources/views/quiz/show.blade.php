@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $quiz->name }}</title>
     <link rel="stylesheet" href="{{ asset('css/quiz.css') }}">
-    <style>:root{@foreach(($design['tokens'] ?? []) as $name => $value)--quiz-{{ $name }}:{{ $value }};@endforeach} {!! $design['additional_css'] ?? '' !!}</style>
+    <style>:root{--quiz-primary:{{ $branding->primary_color }};--quiz-secondary:{{ $branding->secondary_color }};--quiz-background:{{ $branding->background_color }};--quiz-text:{{ $branding->text_color }};--quiz-radius:{{ $branding->border_radius }};} {!! $branding->additional_css !!}</style>
 </head>
 <body class="quiz-page">
 <main class="quiz-shell">
     <header class="quiz-header">
-        <p class="quiz-eyebrow">Business assessment</p>
+        @if ($branding->logo_url)<img src="{{ $branding->logo_url }}" alt="{{ $branding->site_name }}" class="quiz-logo">@endif
+        <p class="quiz-eyebrow">{{ $branding->eyebrow }}</p>
         <h1>{{ $quiz->name }}</h1>
         <p class="quiz-progress" aria-live="polite">Page {{ $submission->current_page + 1 }} of {{ count($pages) }}</p>
         <div class="quiz-progress-track" aria-hidden="true"><span style="width: {{ (int) (($submission->current_page + 1) / max(count($pages), 1) * 100) }}%"></span></div>
@@ -64,5 +65,6 @@
         </div>
     </form>
 </main>
+@if ($branding->additional_js)<script>{!! str_replace('</script>', '', $branding->additional_js) !!}</script>@endif
 </body>
 </html>

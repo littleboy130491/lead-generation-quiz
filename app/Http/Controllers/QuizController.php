@@ -11,6 +11,7 @@ use App\Models\Submission;
 use App\Services\SubmissionContext;
 use App\Services\SubmissionEventRecorder;
 use App\Settings\ApplicationSettings;
+use App\Settings\BrandingSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -18,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 
 class QuizController extends Controller
 {
-    public function show(Request $request, Quiz $quiz, StartOrResumeSubmission $start, ApplicationSettings $settings)
+    public function show(Request $request, Quiz $quiz, StartOrResumeSubmission $start, ApplicationSettings $settings, BrandingSettings $branding)
     {
         abort_unless($quiz->status->value === 'published' && $quiz->activeRevision, 404);
         if ($quiz->password_hash && ! $this->isUnlocked($request, $quiz)) {
@@ -47,8 +48,7 @@ class QuizController extends Controller
             $submission->refresh();
         }
         $page = $pages[$submission->current_page] ?? [];
-        $design = $settings->get('design');
-        $response = response()->view('quiz.show', compact('quiz', 'submission', 'pages', 'page', 'design'));
+        $response = response()->view('quiz.show', compact('quiz', 'submission', 'pages', 'page', 'branding'));
         if ($token) {
             $response->cookie('quiz_resume_'.$quiz->id, $token, 60 * 24 * $settings->operation('resume_days'), null, null, app()->environment('production'), true, false, 'lax');
         }
