@@ -13,7 +13,7 @@ use Awcodes\Curator\Resources\Media\Tables\MediaTable;
 
 return [
     'curation_formats' => PreviewableExtensions::toArray(),
-    'default_disk' => env('CURATOR_DEFAULT_DISK', env('FILESYSTEM_DISK', 'public')),
+    'default_disk' => env('CURATOR_DEFAULT_DISK', 'public'),
     'default_directory' => null,
     'default_visibility' => 'public',
     'features' => [
