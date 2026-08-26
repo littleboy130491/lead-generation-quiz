@@ -78,9 +78,10 @@
         @if (! $showBrief)
             <div class="quiz-chat__composer" role="group" aria-label="{{ $sessionId === null ? 'Start chat' : 'Send answer' }}">
                 <label class="sr-only" for="quiz-chat-message">{{ $sessionId === null ? 'Your quiz idea' : 'Your answer' }}</label>
-                <textarea id="quiz-chat-message" class="quiz-chat__textarea" wire:model="{{ $sessionId === null ? 'opening' : 'reply' }}" rows="2" placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write your answer…' }}"></textarea>
-                <button class="quiz-chat__send" type="button" wire:click="{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}" wire:loading.attr="disabled"><span>{{ $sessionId === null ? 'Start chat' : 'Send' }}</span> →</button>
+                <textarea id="quiz-chat-message" class="quiz-chat__textarea" wire:model.live.debounce.300ms="{{ $sessionId === null ? 'opening' : 'reply' }}" rows="2" placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write your answer…' }}"></textarea>
+                <button class="quiz-chat__send" type="button" wire:click="{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}" wire:loading.attr="disabled"><span wire:loading.remove wire:target="startDiscovery,sendReply">{{ $sessionId === null ? 'Start chat' : 'Send' }}</span><span wire:loading wire:target="startDiscovery,sendReply">Thinking…</span> →</button>
             </div>
+            @error($sessionId === null ? 'opening' : 'reply') <p class="quiz-chat__error">{{ $message }}</p> @enderror
         @endif
     </div>
 
