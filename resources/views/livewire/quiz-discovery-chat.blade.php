@@ -25,17 +25,56 @@
         .quiz-chat__composer { display:flex; gap:10px; align-items:flex-end; padding:16px clamp(18px,4vw,64px); border-top:1px solid var(--qc-line); background:#fff; }
         .quiz-chat__textarea { width:100%; min-height:52px; max-height:132px; padding:14px 15px; border:1px solid #cfd5df; border-radius:15px; outline:none; resize:vertical; color:var(--qc-ink); background:#fff; font:inherit; font-size:15px; line-height:1.45; }
         .quiz-chat__textarea:focus { border-color:var(--qc-brand); box-shadow:0 0 0 3px rgb(var(--quiz-chat-primary-rgb, 217 119 6) / .18); }
-        .quiz-chat__send { display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:0 18px; border:0; border-radius:14px; background:var(--qc-brand); color:#fff; cursor:pointer; font:inherit; font-size:14px; font-weight:750; }
-        .quiz-chat__send:hover { background:var(--qc-brand-dark); }
-        .quiz-chat__send:disabled { cursor:not-allowed; opacity:.55; }
+        .quiz-chat__send { display:inline-flex; align-items:center; justify-content:center; flex:0 0 52px; width:52px; min-height:52px; padding:0; border:0; border-radius:50%; background:var(--qc-brand); color:#fff; cursor:pointer; font:inherit; }
+        .quiz-chat__send svg { width:21px; height:21px; fill:currentColor; transform:translate(-1px,1px); }
+        .quiz-chat__send:hover { background:var(--qc-brand-dark); transform:translateY(-1px); }
+        .quiz-chat__send:disabled { cursor:not-allowed; opacity:.45; transform:none; }
+        .quiz-chat__button-spinner { width:18px; height:18px; border:2px solid rgb(255 255 255 / .4); border-top-color:#fff; border-radius:999px; animation:quiz-chat-spin .65s linear infinite; }
+        .quiz-chat__typing .quiz-chat__bubble { min-width:70px; }
+        .quiz-chat__typing-dots { display:flex; gap:5px; align-items:center; height:18px; }
+        .quiz-chat__typing-dots i { width:7px; height:7px; border-radius:50%; background:var(--qc-muted); animation:quiz-chat-bounce 1.05s ease-in-out infinite; }
+        .quiz-chat__typing-dots i:nth-child(2) { animation-delay:.15s; }.quiz-chat__typing-dots i:nth-child(3) { animation-delay:.3s; }
+        @keyframes quiz-chat-spin { to { transform:rotate(360deg); } } @keyframes quiz-chat-bounce { 0%,60%,100% { transform:translateY(2px); opacity:.4; } 30% { transform:translateY(-3px); opacity:1; } }
         .quiz-chat__error { max-width:720px; margin:8px auto 0; color:#c72929; font-size:13px; }
         .quiz-chat__brief { max-width:720px; margin:0 auto; padding:28px; border-radius:20px; background:#fff; border:1px solid var(--qc-line); }
         .quiz-chat__brief h2 { margin:0; font-size:22px; letter-spacing:-.02em; }.quiz-chat__brief>p{margin:7px 0 24px;color:var(--qc-muted);font-size:14px;line-height:1.5;}
-        .quiz-chat__fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; }.quiz-chat__field--wide{grid-column:1/-1;}.quiz-chat__field label{display:block;margin-bottom:6px;font-size:13px;font-weight:700;}.quiz-chat__field input,.quiz-chat__field textarea{width:100%;padding:11px 12px;border:1px solid #cfd5df;border-radius:10px;background:#fff;color:var(--qc-ink);font:inherit;font-size:14px;}.quiz-chat__field textarea{resize:vertical;}.quiz-chat__actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px;}.quiz-chat__save{border:1px solid #cfd5df;background:#fff;color:var(--qc-ink);}
+        .quiz-chat__fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; }.quiz-chat__field--wide{grid-column:1/-1;}.quiz-chat__field label{display:block;margin-bottom:6px;font-size:13px;font-weight:700;}.quiz-chat__field input,.quiz-chat__field textarea{width:100%;padding:11px 12px;border:1px solid #cfd5df;border-radius:10px;background:#fff;color:var(--qc-ink);font:inherit;font-size:14px;}.quiz-chat__field textarea{resize:vertical;}.quiz-chat__actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px;}.quiz-chat__action-button{min-height:44px;padding:0 16px;border:0;border-radius:12px;background:var(--qc-brand);color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer;}.quiz-chat__action-button:hover{background:var(--qc-brand-dark);}.quiz-chat__action-button:disabled{opacity:.55;cursor:not-allowed;}.quiz-chat__save{border:1px solid #cfd5df;background:#fff;color:var(--qc-ink);}
         @media (max-width:640px){.quiz-chat__shell{height:calc(100dvh - 7rem);min-height:0;max-height:calc(100dvh - 7rem);border-radius:16px}.quiz-chat__header{padding:14px 16px}.quiz-chat__stream{padding:18px 14px}.quiz-chat__composer{padding:12px 14px}.quiz-chat__send{min-width:auto;padding:0 14px}.quiz-chat__bubble{max-width:90%;font-size:14px}.quiz-chat__welcome{margin-top:6vh}.quiz-chat__fields{grid-template-columns:1fr}.quiz-chat__field--wide{grid-column:auto}.quiz-chat__brief{padding:20px}}
     </style>
 
-    <div class="quiz-chat__shell">
+    <div
+        wire:key="quiz-chat-shell-{{ $sessionId ?? 'new' }}"
+        class="quiz-chat__shell"
+        x-data="{
+            draft: '',
+            pending: null,
+            sending: false,
+            scrollToLatest() {
+                this.$nextTick(() => {
+                    this.$refs.stream.scrollTop = this.$refs.stream.scrollHeight
+                })
+            },
+            async send() {
+                const message = this.draft.trim()
+                if (! message || this.sending) return
+
+                this.pending = message
+                this.draft = ''
+                this.sending = true
+                this.scrollToLatest()
+
+                try {
+                    await $wire.$set('{{ $sessionId === null ? 'opening' : 'reply' }}', message)
+                    await $wire.{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}()
+                } catch (error) {
+                    this.draft = message
+                } finally {
+                    this.pending = null
+                    this.sending = false
+                }
+            },
+        }"
+    >
         <header class="quiz-chat__header">
             <div class="quiz-chat__identity">
                 <div class="quiz-chat__avatar">AI</div>
@@ -49,7 +88,7 @@
             @endif
         </header>
 
-        <main class="quiz-chat__stream" aria-live="polite">
+        <main class="quiz-chat__stream" x-ref="stream" aria-live="polite">
             @if ($showBrief)
                 <section class="quiz-chat__brief">
                     <h2>Review the quiz brief</h2>
@@ -63,23 +102,45 @@
                             <div class="quiz-chat__field"><label for="brief-count">Number of questions</label><input id="brief-count" type="number" min="1" max="30" wire:model="brief.question_count" /></div>
                             <div class="quiz-chat__field"><label for="brief-tone">Tone</label><input id="brief-tone" wire:model="brief.tone" /></div>
                         </div>
-                        <div class="quiz-chat__actions"><button class="quiz-chat__send quiz-chat__save" type="button" wire:click="saveBrief" wire:loading.attr="disabled">Save changes</button><button class="quiz-chat__send" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Generate draft</button></div>
+                        <div class="quiz-chat__actions"><button class="quiz-chat__action-button quiz-chat__save" type="button" wire:click="saveBrief" wire:loading.attr="disabled">Save changes</button><button class="quiz-chat__action-button" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Generate draft</button></div>
                     </div>
                 </section>
             @elseif ($sessionId === null)
                 <div class="quiz-chat__welcome"><h2>What quiz do you want to create?</h2><p>Tell me the rough idea. I will ask only what is needed to make a useful lead-generation quiz.</p></div>
             @else
                 @foreach ($this->session()?->messages ?? [] as $message)
-                    <article class="quiz-chat__message quiz-chat__message--{{ $message->role === 'assistant' ? 'assistant' : 'user' }}"><div class="quiz-chat__bubble"><span class="quiz-chat__sender">{{ $message->role === 'assistant' ? 'Quiz assistant' : 'You' }}</span>{{ $message->content }}</div></article>
+                    <article class="quiz-chat__message quiz-chat__message--{{ $message->role === 'assistant' ? 'assistant' : 'user' }}"><div class="quiz-chat__bubble">@if ($message->role === 'assistant')<span class="quiz-chat__sender">Quiz assistant</span>@endif{{ $message->content }}</div></article>
                 @endforeach
             @endif
+            <template x-if="pending">
+                <article class="quiz-chat__message quiz-chat__message--user quiz-chat__message--pending"><div class="quiz-chat__bubble"><span x-text="pending"></span></div></article>
+            </template>
+            <template x-if="sending">
+                <article class="quiz-chat__message quiz-chat__message--assistant quiz-chat__typing" aria-label="Quiz assistant is typing"><div class="quiz-chat__bubble"><span class="quiz-chat__typing-dots"><i></i><i></i><i></i></span></div></article>
+            </template>
         </main>
 
         @if (! $showBrief)
-            <div class="quiz-chat__composer" role="group" aria-label="{{ $sessionId === null ? 'Start chat' : 'Send answer' }}">
-                <label class="sr-only" for="quiz-chat-message">{{ $sessionId === null ? 'Your quiz idea' : 'Your answer' }}</label>
-                <textarea id="quiz-chat-message" class="quiz-chat__textarea" wire:model.live.debounce.300ms="{{ $sessionId === null ? 'opening' : 'reply' }}" rows="2" placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write your answer…' }}"></textarea>
-                <button class="quiz-chat__send" type="button" wire:click="{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}" wire:loading.attr="disabled"><span wire:loading.remove wire:target="startDiscovery,sendReply">{{ $sessionId === null ? 'Start chat' : 'Send' }}</span><span wire:loading wire:target="startDiscovery,sendReply">Thinking…</span> →</button>
+            <div
+                wire:key="quiz-chat-composer-{{ $sessionId ?? 'new' }}"
+                class="quiz-chat__composer"
+                role="group"
+                aria-label="{{ $sessionId === null ? 'Start chat' : 'Send answer' }}"
+            >
+                <textarea
+                    id="quiz-chat-message"
+                    class="quiz-chat__textarea"
+                    x-model="draft"
+                    x-on:keydown.enter.meta.prevent="send()"
+                    x-on:keydown.enter.ctrl.prevent="send()"
+                    rows="2"
+                    aria-label="{{ $sessionId === null ? 'Describe the quiz you want to create' : 'Write your answer' }}"
+                    placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write a reply…' }}"
+                ></textarea>
+                <button class="quiz-chat__send" type="button" x-on:click="send()" x-bind:disabled="! draft.trim() || sending" aria-label="{{ $sessionId === null ? 'Start chat' : 'Send message' }}" title="{{ $sessionId === null ? 'Start chat' : 'Send message' }}">
+                    <svg x-show="! sending" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 2.7 3 10.1c-.9.4-.9 1.7.1 2l7.1 2.3 2.3 7.1c.3 1 1.6 1 2 .1l7.4-18.5c.3-.7-.4-1.4-1.1-1.1ZM11.2 13.1l-1.4 5-1.2-3.7-3.7-1.2 12.9-5.1-6.7 5Z" /></svg>
+                    <span class="quiz-chat__button-spinner" x-show="sending" aria-hidden="true"></span>
+                </button>
             </div>
             @error($sessionId === null ? 'opening' : 'reply') <p class="quiz-chat__error">{{ $message }}</p> @enderror
         @endif
