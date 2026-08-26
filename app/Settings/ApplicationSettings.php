@@ -2,6 +2,7 @@
 
 namespace App\Settings;
 
+use App\Ai\Discovery\QuizDiscoveryPrompt;
 use App\Ai\Prompt\AnalysisPromptVariables;
 use App\Ai\Prompt\AnalysisResultPrompt;
 use App\Ai\Prompt\QuizDefinitionPrompt;
@@ -13,7 +14,7 @@ class ApplicationSettings
     private const DEFAULTS = [
         'ai.quiz' => [],
         'ai.report' => [],
-        'prompts' => ['quiz_version' => 'v1', 'quiz_template' => QuizDefinitionPrompt::DEFAULT_TEMPLATE, 'report_version' => 'v1', 'report_template' => AnalysisResultPrompt::DEFAULT_TEMPLATE],
+        'prompts' => ['quiz_version' => 'v1', 'quiz_template' => QuizDefinitionPrompt::DEFAULT_TEMPLATE, 'discovery_version' => 'v1', 'discovery_template' => QuizDiscoveryPrompt::DEFAULT_TEMPLATE, 'report_version' => 'v1', 'report_template' => AnalysisResultPrompt::DEFAULT_TEMPLATE],
         'report.email' => ['subject' => 'Your quiz report', 'html' => '<h1>{{report.executive_summary}}</h1>', 'text' => '{{report.executive_summary}}'],
         'design' => ['tokens' => [], 'additional_css' => ''],
         'spam' => ['turnstile_enabled' => false, 'analysis_mode' => 'always'],
@@ -106,12 +107,12 @@ class ApplicationSettings
             throw new InvalidArgumentException('Unsupported setting fields are not allowed.');
         }
         if ($key === 'prompts') {
-            foreach (['quiz_version', 'report_version'] as $field) {
+            foreach (['quiz_version', 'discovery_version', 'report_version'] as $field) {
                 if (isset($value[$field]) && ! preg_match('/^[a-z0-9._-]{1,60}$/i', (string) $value[$field])) {
                     throw new InvalidArgumentException('Prompt versions must be safe labels.');
                 }
             }
-            foreach (['quiz_template', 'report_template'] as $field) {
+            foreach (['quiz_template', 'discovery_template', 'report_template'] as $field) {
                 if (isset($value[$field]) && (! is_string($value[$field]) || strlen($value[$field]) > 10000 || str_contains(strtolower($value[$field]), '<?'))) {
                     throw new InvalidArgumentException('Prompt templates must be bounded text.');
                 }

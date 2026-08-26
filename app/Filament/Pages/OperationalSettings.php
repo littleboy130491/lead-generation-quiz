@@ -95,6 +95,10 @@ class OperationalSettings extends Page
                         ->helperText('Label snapshotted with each quiz-draft generation audit record.'),
                     TextInput::make('prompts.report_version')->label('Analysis prompt version')->required()->maxLength(60)->regex('/^[a-z0-9._-]{1,60}$/i')
                         ->helperText('Label snapshotted with each analysis request.'),
+                    TextInput::make('prompts.discovery_version')->label('Discovery prompt version')->required()->maxLength(60)->regex('/^[a-z0-9._-]{1,60}$/i')
+                        ->helperText('Label snapshotted with each AI quiz-discovery interview.'),
+                    Textarea::make('prompts.discovery_template')->label('Quiz discovery interview system prompt')->rows(10)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()
+                        ->helperText('Instructions used by the guided AI interview before a quiz draft is generated. The reviewed brief, not raw chat text, is used for generation.'),
                     Textarea::make('prompts.quiz_template')->label('Quiz creation system prompt')->rows(12)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()
                         ->helperText('Instructions used when Generate AI draft creates a quiz definition. Combined with built-in draft-only safety rules.'),
                     Textarea::make('prompts.report_template')->label('Analysis result system prompt')->rows(12)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()

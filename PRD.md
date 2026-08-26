@@ -411,6 +411,10 @@ The administrator supplies audience, objective, business context, desired insigh
 
 When no `ai.quiz` chain entry has a matching environment provider key, quiz-definition generation does **not** fail closed. The same `QuizDefinitionGenerator` path falls back to an application-owned structural scaffold built from the sanitized brief (stable IDs, supported question types, opening copy, `result.mode=ai`). Brief fields remain untrusted plain text and are never treated as instructions. The Generate AI draft header action remains available on quiz create and edit; when credentials are missing it explains that a structural scaffold will be used and still allows Confirm. Programmatic generation (`POST /api/v1/quizzes/generate` and `GenerateQuizDraft`) likewise returns a validated scaffold instead of `ai_unavailable`. Missing quiz AI credentials therefore must not block draft creation for administrators or server-to-server agents. Report/analysis generation is unchanged: it still raises `GenerationException` with `ai_unavailable` when the report chain has no usable credentials. When a quiz chain has usable credentials but every provider attempt fails, quiz generation raises `ai_generation_failed` (not the credential-missing path).
 
+### 12.1a AI quiz discovery interview
+
+Before creating a quiz draft, an administrator can open **AI quiz discovery** in the admin panel. The interview persists append-only user/assistant messages and a mutable, reviewed structured brief owned by the administrator. It asks one focused question at a time for missing business context, target audience, objective, and desired respondent insight; the administrator can edit the resulting brief directly. The interview uses the configured quiz AI provider/model chain when credentials are available and safely falls back to the same deterministic guided questions otherwise. Raw chat is untrusted reference material and is never supplied to `GenerateQuizDraft`; only the reviewed allowlisted brief is passed to generation after explicit confirmation. Each session snapshots the configurable discovery system prompt; generation retains its own immutable quiz-definition prompt/audit contract.
+
 ### 12.1a Server-to-server quiz-generation API
 
 `POST /api/v1/quizzes/generate` is a narrow server-to-server interface over the same draft-generation and optional publication actions. It accepts only allowlisted quiz metadata plus the documented structured brief; it does not accept arbitrary prompts, raw definitions, credentials, or frontend code. Authentication is a single environment-only `QUIZ_GENERATION_API_TOKEN` Bearer secret, compared in constant time and required even when the value is absent (fail closed). The route is rate-limited to 20 requests/minute. `publish: false` returns an editable draft; `publish: true` creates a new immutable active revision. When no usable quiz AI credentials exist, the endpoint still succeeds with a validated structural scaffold from the brief. Failed provider attempts (credentials present but every attempt failed) retain their draft and append-only audit row for authorized inspection, return only normalized non-secret errors, and are never silently deleted. The comprehensive request/response, error, authentication, rotation, and operational contract is normative in `docs/QUIZ_GENERATION_API.md`.
@@ -650,6 +654,11 @@ The administrator-only Branding & design settings page is available to `super_ad
 
 - Operational settings stores `notifications.submission_emails` as a validated list of one or more administrator addresses (empty disables notices).
 - When a submission newly becomes `completed`, the application queues one notification email per configured address with quiz name, lead email, and an admin link. Idempotent re-finalization does not re-notify.
+
+### 2026-08-26 — AI quiz discovery interview
+
+- Added authenticated **AI quiz discovery** at `/admin/quiz-discovery`: a persisted, append-only interview transcript with a directly editable reviewed brief. The AI adapter uses the configured quiz chain with a schema-constrained response when credentials exist and falls back to focused deterministic questions otherwise. Only the reviewed allowlisted brief can create a quiz draft.
+- Operational settings now provides a versioned **Quiz discovery interview system prompt**, snapshotted for each session.
 
 ### 2026-08-26 — Default analysis-result prompt
 

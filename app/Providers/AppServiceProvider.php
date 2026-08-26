@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Ai\Contracts\QuizAnalysisGenerator;
 use App\Ai\Contracts\QuizDefinitionGenerator;
+use App\Ai\Discovery\LaravelQuizDiscoveryInterviewer;
+use App\Ai\Discovery\QuizDiscoveryInterviewer;
 use App\Ai\LaravelAi\LaravelQuizAnalysisGenerator;
 use App\Ai\LaravelAi\LaravelQuizDefinitionGenerator;
 use App\Mail\Contracts\ReportDeliveryTransport;
@@ -22,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(QuizAnalysisGenerator::class, LaravelQuizAnalysisGenerator::class);
         $this->app->bind(QuizDefinitionGenerator::class, LaravelQuizDefinitionGenerator::class);
+        $this->app->bind(QuizDiscoveryInterviewer::class, LaravelQuizDiscoveryInterviewer::class);
         $this->app->bind(ReportDeliveryTransport::class, LaravelReportDeliveryTransport::class);
         $this->app->bind(TurnstileVerifier::class, function () {
             return config('services.turnstile.secret_key')
