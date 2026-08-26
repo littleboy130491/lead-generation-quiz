@@ -21,6 +21,8 @@ class QuizDiscoveryChat extends Component
 
     public string $reply = '';
 
+    public bool $showBrief = false;
+
     /** @var array<string, mixed> */
     public array $brief = [];
 
