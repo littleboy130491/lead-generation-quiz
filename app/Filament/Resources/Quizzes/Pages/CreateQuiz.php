@@ -33,6 +33,7 @@ class CreateQuiz extends CreateRecord
     protected function getHeaderActions(): array
     {
         return [
+            $this->quizDiscoveryAction(),
             $this->generateQuizDraftAction(),
         ];
     }

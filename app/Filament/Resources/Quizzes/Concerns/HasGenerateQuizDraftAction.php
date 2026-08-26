@@ -6,6 +6,7 @@ use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Ai\ConfiguredAiProviders;
 use App\Ai\GenerationException;
 use App\Enums\QuizStatus;
+use App\Filament\Pages\QuizDiscovery;
 use App\Models\Quiz;
 use App\Settings\ApplicationSettings;
 use Filament\Actions\Action;
@@ -28,18 +29,31 @@ trait HasGenerateQuizDraftAction
                 TextInput::make('question_count')->numeric()->minValue(1)->maxValue(30),
                 TextInput::make('tone')->maxLength(100),
             ])
-            ->modalDescription(fn (): ?string => $this->quizAiIsConfigured()
-                ? null
-                : ConfiguredAiProviders::SCAFFOLD_ADMIN_GUIDANCE)
+            ->modalDescription(fn (): string => trim(
+                'For a guided conversation before generation, close this dialog and choose AI quiz interview. '.(
+                    $this->quizAiIsConfigured() ? '' : ConfiguredAiProviders::SCAFFOLD_ADMIN_GUIDANCE
+                )
+            ))
             ->action(function (array $data): void {
                 $usedAi = $this->quizAiIsConfigured();
 
                 try {
                     $quiz = $this->quizForAiDraftGeneration($data);
                     app(GenerateQuizDraft::class)->handle($quiz, $data);
+                    $this->afterAiDraftGenerated($quiz);
                 } catch (GenerationException $exception) {
                     if (! app()->runningUnitTests()) {
                         Notification::make()->danger()->title($exception->getMessage())->send();
+                    }
+
+                    return;
+                } catch (\Throwable $exception) {
+                    report($exception);
+                    if (! app()->runningUnitTests()) {
+                        Notification::make()->danger()
+                            ->title('Quiz draft generation could not be completed.')
+                            ->body('The error was recorded. You can close this dialog and retry after reviewing the draft history.')
+                            ->send();
                     }
 
                     return;
@@ -50,9 +64,15 @@ trait HasGenerateQuizDraftAction
                         $usedAi ? 'AI draft generated.' : 'Structural draft generated.'
                     )->send();
                 }
-
-                $this->afterAiDraftGenerated($quiz);
             });
+    }
+
+    protected function quizDiscoveryAction(): Action
+    {
+        return Action::make('quizDiscovery')
+            ->label('AI quiz interview')
+            ->icon('heroicon-o-chat-bubble-left-right')
+            ->url(QuizDiscovery::getUrl());
     }
 
     /**

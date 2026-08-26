@@ -45,6 +45,7 @@ class EditQuiz extends EditRecord
             Action::make('preview')
                 ->label('Preview')
                 ->url(fn (): string => route('quizzes.show', $this->getRecord()), shouldOpenInNewTab: true),
+            $this->quizDiscoveryAction(),
             $this->generateQuizDraftAction(),
             Action::make('publish')->requiresConfirmation()->action(fn () => app(PublishQuizRevision::class)->handle($this->getRecord(), auth()->id())),
             DeleteAction::make(),

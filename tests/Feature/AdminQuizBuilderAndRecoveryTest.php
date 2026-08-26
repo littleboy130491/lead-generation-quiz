@@ -37,6 +37,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->get('/admin/quizzes/create')
             ->assertOk()
+            ->assertSee('AI quiz interview')
             ->assertSee('Generate AI draft')
             ->assertSee('Settings')
             ->assertSee('Result')
@@ -63,6 +64,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->actingAs($user)
             ->get("/admin/quizzes/{$quiz->id}/edit")
             ->assertOk()
+            ->assertSee('AI quiz interview')
             ->assertSee('Generate AI draft')
             ->assertSee('Settings')
             ->assertSee('Quiz')
@@ -81,6 +83,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $page = Livewire::actingAs(User::factory()->create())
             ->test(EditQuiz::class, ['record' => $quiz->id])
+            ->assertSee('AI quiz interview')
             ->assertSee('Generate AI draft')
             ->mountAction('generateDraft');
 
@@ -97,6 +100,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $page = Livewire::actingAs(User::factory()->create())
             ->test(CreateQuiz::class)
+            ->assertSee('AI quiz interview')
             ->assertSee('Generate AI draft')
             ->mountAction('generateDraft');
 
