@@ -8,6 +8,7 @@
         .quiz-chat__avatar { display:grid; place-items:center; width:36px; height:36px; flex:0 0 auto; border-radius:12px; background:var(--qc-ink); color:#fff; font-size:13px; font-weight:800; letter-spacing:.04em; }
         .quiz-chat__title { margin:0; font-size:15px; font-weight:750; line-height:1.2; }
         .quiz-chat__subtitle { margin:3px 0 0; color:var(--qc-muted); font-size:12px; }
+        .quiz-chat__header-actions { display:flex; align-items:center; gap:4px; }
         .quiz-chat__review { border:0; background:transparent; color:var(--qc-brand); padding:8px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
         .quiz-chat__review:hover { text-decoration:underline; }
         .quiz-chat__stream { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:28px clamp(18px,4vw,64px); background:var(--qc-surface); }
@@ -41,7 +42,10 @@
                 <div><p class="quiz-chat__title">Quiz assistant</p><p class="quiz-chat__subtitle">A focused conversation before creating a draft</p></div>
             </div>
             @if ($sessionId !== null)
-                <button class="quiz-chat__review" type="button" wire:click="$toggle('showBrief')">{{ $showBrief ? 'Back to chat' : 'Review brief' }}</button>
+                <div class="quiz-chat__header-actions">
+                    <button class="quiz-chat__review" type="button" wire:click="startNewInterview">New interview</button>
+                    <button class="quiz-chat__review" type="button" wire:click="$toggle('showBrief')">{{ $showBrief ? 'Back to chat' : 'Review brief' }}</button>
+                </div>
             @endif
         </header>
 

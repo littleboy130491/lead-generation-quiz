@@ -39,6 +39,12 @@ class QuizDiscoveryChat extends Component
         }
     }
 
+    public function startNewInterview(): void
+    {
+        $this->session()?->update(['status' => 'abandoned']);
+        $this->reset('sessionId', 'opening', 'reply', 'brief', 'showBrief');
+    }
+
     public function startDiscovery(): void
     {
         $this->validate(['opening' => ['required', 'string', 'max:4000']]);
