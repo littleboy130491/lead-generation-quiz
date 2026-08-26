@@ -3,6 +3,7 @@
 namespace App\Actions\Submissions;
 
 use App\Ai\Prompt\AnalysisPromptBuilder;
+use App\Domain\Quiz\Result\QuizResultConfig;
 use App\Enums\AnalysisStatus;
 use App\Enums\AnalysisTrigger;
 use App\Enums\SubmissionStatus;
@@ -44,14 +45,24 @@ class FinalizeSubmission
             if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw ValidationException::withMessages(['email' => 'A valid email address is required.']);
             }
-            $s->update(['email' => $email, 'name' => $contact['name'] ?? null, 'company' => $contact['company'] ?? null, 'phone' => $contact['phone'] ?? null, 'status' => SubmissionStatus::Completed, 'completed_at' => now()]);
+            $quiz = $s->quiz;
+            $s->update([
+                'email' => $email,
+                'name' => $quiz->collectsContactField('name') ? ($contact['name'] ?? null) : null,
+                'company' => $quiz->collectsContactField('company') ? ($contact['company'] ?? null) : null,
+                'phone' => $quiz->collectsContactField('phone') ? ($contact['phone'] ?? null) : null,
+                'status' => SubmissionStatus::Completed,
+                'completed_at' => now(),
+            ]);
             $this->events->touch($s, $this->context->capture($request));
             $s->refresh();
             $this->events->record($s, 'completed');
-            if ($spam['analysis_mode'] === 'always') {
-                $prompt = $this->prompts->build($s->quizRevision->definition, $s->answers_snapshot ?? []);
+            $definition = $s->quizRevision->definition ?? [];
+            if ($spam['analysis_mode'] === 'always' && ! QuizResultConfig::usesScoreResults($definition)) {
+                $prompt = $this->prompts->build($definition, $s->answers_snapshot ?? []);
+                $context = $this->prompts->contextForAi($definition, $s->answers_snapshot ?? []);
                 $configured = $this->settings->get('prompts');
-                $analysis = Analysis::firstOrCreate(['submission_id' => $s->id, 'automatic_key' => 'initial'], ['public_id' => (string) Str::uuid(), 'sequence' => 1, 'status' => AnalysisStatus::Queued, 'trigger' => AnalysisTrigger::Automatic, 'created_manually' => false, 'requested_provider_chain' => $this->settings->get('ai.report'), 'prompt_version' => $configured['report_version'], 'system_prompt_snapshot' => $prompt->system, 'input_snapshot' => ['revision' => $s->quizRevision->definition, 'answers' => $s->answers_snapshot], 'queued_at' => now()]);
+                $analysis = Analysis::firstOrCreate(['submission_id' => $s->id, 'automatic_key' => 'initial'], ['public_id' => (string) Str::uuid(), 'sequence' => 1, 'status' => AnalysisStatus::Queued, 'trigger' => AnalysisTrigger::Automatic, 'created_manually' => false, 'requested_provider_chain' => $this->settings->get('ai.report'), 'prompt_version' => $configured['report_version'], 'system_prompt_snapshot' => $prompt->system, 'input_snapshot' => ['revision' => $context['revision'], 'answers' => $context['answers']], 'queued_at' => now()]);
                 if ($analysis->wasRecentlyCreated) {
                     $this->events->record($s, 'analysis_requested', ['analysis_id' => $analysis->id, 'trigger' => 'automatic']);
                     GenerateAnalysisJob::dispatch($analysis->id)->afterCommit();

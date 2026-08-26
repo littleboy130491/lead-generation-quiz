@@ -47,4 +47,10 @@ class Quiz extends Model
     {
         return $this->hasMany(Submission::class);
     }
+
+    public function collectsContactField(string $field): bool
+    {
+        return in_array($field, ['name', 'company', 'phone'], true)
+            && filter_var(data_get($this->settings, 'collect_'.$field, false), FILTER_VALIDATE_BOOLEAN);
+    }
 }

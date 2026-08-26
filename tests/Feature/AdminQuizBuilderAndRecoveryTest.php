@@ -10,6 +10,8 @@ use App\Domain\Quiz\Pagination\QuizPageCompiler;
 use App\Enums\AnalysisStatus;
 use App\Enums\AnalysisTrigger;
 use App\Enums\DeliveryStatus;
+use App\Filament\Resources\Quizzes\Pages\CreateQuiz;
+use App\Filament\Resources\Quizzes\Pages\EditQuiz;
 use App\Filament\Resources\Quizzes\Schemas\QuizForm;
 use App\Jobs\GenerateAnalysisJob;
 use App\Jobs\SendReportDeliveryJob;
@@ -19,9 +21,11 @@ use App\Models\QuizRevision;
 use App\Models\ReportDelivery;
 use App\Models\Submission;
 use App\Models\User;
+use App\Settings\ApplicationSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Hash;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class AdminQuizBuilderAndRecoveryTest extends TestCase
@@ -33,8 +37,14 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->get('/admin/quizzes/create')
             ->assertOk()
-            ->assertSee('Quiz builder')
-            ->assertSee('Access and lead settings');
+            ->assertSee('Generate AI draft')
+            ->assertSee('Settings')
+            ->assertSee('Result')
+            ->assertSee('Thank you')
+            ->assertSee('Opening page')
+            ->assertSee('Access and lead settings')
+            ->assertSee('fi-width-full', false)
+            ->assertDontSee('fi-width-7xl', false);
     }
 
     public function test_authenticated_administrator_can_open_the_existing_quiz_builder(): void
@@ -53,7 +63,71 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->actingAs($user)
             ->get("/admin/quizzes/{$quiz->id}/edit")
             ->assertOk()
-            ->assertSee('Quiz builder');
+            ->assertSee('Generate AI draft')
+            ->assertSee('Settings')
+            ->assertSee('Quiz')
+            ->assertSee('Result')
+            ->assertSee('Thank you')
+            ->assertSee('Opening page')
+            ->assertSee('fi-width-full', false)
+            ->assertDontSee('fi-width-7xl', false);
+    }
+
+    public function test_generate_ai_draft_modal_disables_confirm_when_provider_credentials_are_missing(): void
+    {
+        config(['ai.providers.openai.key' => null]);
+        app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
+        $quiz = Quiz::factory()->create();
+
+        $page = Livewire::actingAs(User::factory()->create())
+            ->test(EditQuiz::class, ['record' => $quiz->id])
+            ->assertSee('Generate AI draft')
+            ->mountAction('generateDraft');
+
+        $action = $page->instance()->getMountedAction();
+        $this->assertNotNull($action);
+        $this->assertStringContainsString('No configured AI provider credentials are available.', (string) $action->getModalDescription());
+        $submit = $action->getModalSubmitAction();
+        $this->assertNotNull($submit);
+        $this->assertTrue($submit->isDisabled());
+        $this->assertFalse($action->isDisabled());
+    }
+
+    public function test_generate_ai_draft_header_is_visible_on_create_when_provider_credentials_are_missing(): void
+    {
+        config(['ai.providers.openai.key' => null]);
+        app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
+
+        $page = Livewire::actingAs(User::factory()->create())
+            ->test(CreateQuiz::class)
+            ->assertSee('Generate AI draft')
+            ->mountAction('generateDraft');
+
+        $action = $page->instance()->getMountedAction();
+        $this->assertNotNull($action);
+        $this->assertStringContainsString('No configured AI provider credentials are available.', (string) $action->getModalDescription());
+        $submit = $action->getModalSubmitAction();
+        $this->assertNotNull($submit);
+        $this->assertTrue($submit->isDisabled());
+        $this->assertFalse($action->isDisabled());
+    }
+
+    public function test_generate_ai_draft_modal_enables_confirm_when_provider_credentials_are_configured(): void
+    {
+        config(['ai.providers.openai.key' => 'sk-test']);
+        app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
+        $quiz = Quiz::factory()->create();
+
+        $page = Livewire::actingAs(User::factory()->create())
+            ->test(EditQuiz::class, ['record' => $quiz->id])
+            ->mountAction('generateDraft');
+
+        $action = $page->instance()->getMountedAction();
+        $this->assertNotNull($action);
+        $this->assertStringNotContainsString('No configured AI provider credentials are available.', (string) $action->getModalDescription());
+        $submit = $action->getModalSubmitAction();
+        $this->assertNotNull($submit);
+        $this->assertFalse($submit->isDisabled());
     }
 
     public function test_authenticated_administrator_can_open_preview_and_revision_history_surfaces(): void
@@ -70,6 +144,17 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
     public function test_admin_builder_payload_creates_a_publishable_multi_page_public_quiz_without_storing_a_raw_password(): void
     {
         $payload = [
+            'opening' => [
+                'html' => '<p>Welcome to the assessment</p>',
+                'start_button_label' => 'Begin now',
+                'hide_start_button' => false,
+            ],
+            'result' => ['mode' => 'score'],
+            'thank_you' => ['enabled' => true, 'html' => '<h1>Custom thanks</h1>'],
+            'score_results' => [
+                ['id' => 'low', 'title' => 'Needs work', 'min_score' => 0, 'max_score' => 2, 'html' => '<p>Low</p>'],
+                ['id' => 'high', 'title' => 'Ready', 'min_score' => 3, 'max_score' => 10, 'html' => '<p>High</p>'],
+            ],
             'blocks' => [
                 [
                     'type' => 'question',
@@ -78,7 +163,9 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
                     'label' => 'How ready are you?',
                     'help' => 'Choose one answer.',
                     'required' => true,
-                    'options' => [['id' => 'ready', 'value' => 'ready', 'label' => 'Ready']],
+                    'image_url' => 'https://cdn.example.test/ready.png',
+                    'icon' => '✅',
+                    'options' => [['id' => 'ready', 'value' => 'ready', 'label' => 'Ready', 'score' => 5]],
                     'visibility' => null,
                 ],
                 ['type' => 'page_break', 'id' => 'page-two'],
@@ -114,11 +201,20 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $revision = app(PublishQuizRevision::class)->handle($quiz);
 
         $this->assertSame(2, count(app(QuizPageCompiler::class)->compile($revision->definition)));
+        $this->assertSame('Begin now', $revision->definition['opening']['start_button_label']);
+        $this->assertSame('score', $revision->definition['result']['mode']);
+        $this->assertTrue($revision->definition['thank_you']['enabled']);
+        $this->assertSame('<h1>Custom thanks</h1>', $revision->definition['thank_you']['html']);
+        $this->assertSame(5, $revision->definition['blocks'][0]['options'][0]['score']);
+        $this->assertSame('https://cdn.example.test/ready.png', $revision->definition['blocks'][0]['image_url']);
+        $this->assertSame('✅', $revision->definition['blocks'][0]['icon']);
+        $this->assertCount(2, $revision->definition['score_results']);
         $this->assertTrue(Hash::check('secret password', $quiz->password_hash));
         $this->assertNotSame('secret password', $quiz->password_hash);
         $this->assertArrayNotHasKey('password_hash', QuizForm::toFormState($quiz));
+        $this->assertSame('<p>Welcome to the assessment</p>', QuizForm::toFormState($quiz)['opening']['html']);
         $this->post('/readiness-assessment/unlock', ['password' => 'secret password'])->assertRedirect('/readiness-assessment');
-        $this->get('/readiness-assessment')->assertOk()->assertSee('How ready are you?')->assertSee('Page 1 of 2');
+        $this->get('/readiness-assessment')->assertOk()->assertSee('Welcome to the assessment')->assertSee('Begin now')->assertDontSee('How ready are you?');
     }
 
     public function test_stale_processing_analysis_is_requeued_once_and_dispatched_without_creating_a_duplicate(): void

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Thank you</title>
+    <title>{{ $pageTitle ?? 'Thank you' }}</title>
     <link rel="stylesheet" href="{{ asset('css/quiz.css') }}">
 </head>
 <body class="quiz-page">

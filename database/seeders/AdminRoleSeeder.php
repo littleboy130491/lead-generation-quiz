@@ -25,8 +25,13 @@ class AdminRoleSeeder extends Seeder
             Permission::findOrCreate("View:{$page}");
         }
 
+        $allPermissions = Permission::query()->pluck('name')->all();
+
+        $superAdmin = Role::findOrCreate((string) config('filament-shield.super_admin.name', 'super_admin'));
+        $superAdmin->syncPermissions($allPermissions);
+
         $admin = Role::findOrCreate('admin');
-        $admin->syncPermissions(Permission::query()->pluck('name')->all());
+        $admin->syncPermissions($allPermissions);
 
         $quizManager = Role::findOrCreate('quiz_manager');
         $quizManager->syncPermissions(Permission::query()->where('name', 'like', '%:Quiz')->pluck('name')->all());

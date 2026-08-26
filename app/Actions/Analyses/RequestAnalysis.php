@@ -25,7 +25,8 @@ class RequestAnalysis
             $revision = $submission->quizRevision->definition;
             $answers = $submission->answers_snapshot ?? [];
             $prompt = $this->prompts->build($revision, $answers);
-            $analysis = Analysis::create(['public_id' => (string) Str::uuid(), 'submission_id' => $submission->id, 'sequence' => ((int) $submission->analyses()->max('sequence')) + 1, 'status' => AnalysisStatus::Queued, 'trigger' => AnalysisTrigger::Manual, 'created_manually' => true, 'requested_by' => $requestedBy, 'requested_provider_chain' => $this->settings->get('ai.report', config('quiz.analysis_provider_chain', [])), 'prompt_version' => $configuredPrompts['report_version'], 'system_prompt_snapshot' => $prompt->system, 'input_snapshot' => ['revision' => $revision, 'answers' => $answers, 'send_when_completed' => $sendWhenCompleted], 'queued_at' => now()]);
+            $context = $this->prompts->contextForAi($revision, $answers);
+            $analysis = Analysis::create(['public_id' => (string) Str::uuid(), 'submission_id' => $submission->id, 'sequence' => ((int) $submission->analyses()->max('sequence')) + 1, 'status' => AnalysisStatus::Queued, 'trigger' => AnalysisTrigger::Manual, 'created_manually' => true, 'requested_by' => $requestedBy, 'requested_provider_chain' => $this->settings->get('ai.report', config('quiz.analysis_provider_chain', [])), 'prompt_version' => $configuredPrompts['report_version'], 'system_prompt_snapshot' => $prompt->system, 'input_snapshot' => ['revision' => $context['revision'], 'answers' => $context['answers'], 'send_when_completed' => $sendWhenCompleted], 'queued_at' => now()]);
             GenerateAnalysisJob::dispatch($analysis->id)->afterCommit();
             $this->events->record($submission, 'analysis_requested', ['analysis_id' => $analysis->id, 'trigger' => 'manual']);
 

@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\AdminQuizHistoryController;
-use App\Http\Controllers\OperationalSettingsController;
 use App\Http\Controllers\QuizContactController;
 use App\Http\Controllers\QuizController;
 use App\Http\Controllers\QuizProgressController;
@@ -10,7 +9,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => view('welcome'))->name('home');
 Route::post('/webhooks/mailgun', MailgunWebhookController::class)->name('webhooks.mailgun');
-Route::put('/admin/operational-settings', [OperationalSettingsController::class, 'update'])->middleware('auth')->name('admin.operational-settings.update');
 Route::middleware('auth')->prefix('admin/quizzes/{quiz}')->group(function (): void {
     Route::get('/preview', [AdminQuizHistoryController::class, 'preview'])->name('admin.quizzes.preview');
     Route::get('/history', [AdminQuizHistoryController::class, 'history'])->name('admin.quizzes.history');
@@ -30,6 +28,9 @@ Route::post('/submissions/{submission}/pages/{page}', [QuizController::class, 's
     ->middleware(['quiz.submission', 'throttle:quiz-progress'])
     ->whereNumber('page')
     ->name('submissions.save-page');
+Route::post('/submissions/{submission}/opening', [QuizController::class, 'dismissOpening'])
+    ->middleware(['quiz.submission', 'throttle:quiz-progress'])
+    ->name('submissions.dismiss-opening');
 Route::post('/submissions/{submission}/contact', [QuizContactController::class, 'store'])
     ->middleware(['quiz.submission', 'throttle:quiz-contact'])
     ->name('submissions.finalize');

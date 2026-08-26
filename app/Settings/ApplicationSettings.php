@@ -2,6 +2,7 @@
 
 namespace App\Settings;
 
+use App\Ai\Prompt\AnalysisPromptVariables;
 use App\Models\ApplicationSetting;
 use InvalidArgumentException;
 
@@ -84,6 +85,15 @@ class ApplicationSettings
             foreach (['quiz_template', 'report_template'] as $field) {
                 if (isset($value[$field]) && (! is_string($value[$field]) || strlen($value[$field]) > 10000 || str_contains(strtolower($value[$field]), '<?'))) {
                     throw new InvalidArgumentException('Prompt templates must be bounded text.');
+                }
+            }
+            if (isset($value['report_template']) && is_string($value['report_template'])) {
+                $invalid = app(AnalysisPromptVariables::class)->disallowedPlaceholders(
+                    $value['report_template'],
+                    allowPerQuestion: false,
+                );
+                if ($invalid !== []) {
+                    throw new InvalidArgumentException('Analysis system prompts may only use {{questions_and_answers}}.');
                 }
             }
 

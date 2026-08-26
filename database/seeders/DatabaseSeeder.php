@@ -17,12 +17,16 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(AdminRoleSeeder::class);
 
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $admin = User::query()->firstOrCreate(
+            ['email' => 'admin@example.test'],
+            [
+                'name' => 'Admin',
+                'password' => 'password',
+            ],
+        );
+        if (! $admin->hasAnyRole(['super_admin', 'admin'])) {
+            $admin->assignRole('admin');
+        }
 
         $this->call(LeadGenerationQuizSeeder::class);
     }

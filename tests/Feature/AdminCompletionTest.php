@@ -13,6 +13,8 @@ use App\Models\QuizRevision;
 use App\Models\User;
 use App\Settings\ApplicationSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AdminCompletionTest extends TestCase
@@ -83,7 +85,60 @@ class AdminCompletionTest extends TestCase
             ->get('/admin/operational-settings')
             ->assertOk()
             ->assertSee('Quiz AI provider chain')
-            ->assertSee('Additional CSS');
+            ->assertSee('Resume days')
+            ->assertSee('Turnstile enabled')
+            ->assertDontSee('Structured JSON');
+    }
+
+    public function test_operational_settings_filament_form_persists_non_secret_configuration(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/admin/operational-settings')
+            ->assertOk()
+            ->assertSee('AI system prompts')
+            ->assertSee('Quiz creation system prompt')
+            ->assertSee('Analysis result system prompt');
+
+        Livewire::test(OperationalSettings::class)
+            ->fillForm([
+                'ai.quiz' => [['provider' => 'openai', 'model' => 'gpt-test']],
+                'ai.report' => [['provider' => 'openai', 'model' => 'gpt-report']],
+                'prompts.quiz_version' => 'v1',
+                'prompts.quiz_template' => 'Draft a quiz.',
+                'prompts.report_version' => 'runtime-v2',
+                'prompts.report_template' => 'Write the report.',
+                'spam.turnstile_enabled' => true,
+                'spam.analysis_mode' => 'manual',
+                'operations.resume_days' => 14,
+                'operations.retention_days' => 60,
+                'operations.retry_attempts' => 2,
+                'operations.timeout_seconds' => 90,
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $settings = app(ApplicationSettings::class);
+        $this->assertSame([['provider' => 'openai', 'model' => 'gpt-test']], $settings->get('ai.quiz'));
+        $this->assertSame([['provider' => 'openai', 'model' => 'gpt-report']], $settings->get('ai.report'));
+        $this->assertSame('Draft a quiz.', $settings->get('prompts')['quiz_template']);
+        $this->assertSame('Write the report.', $settings->get('prompts')['report_template']);
+        $this->assertSame('runtime-v2', $settings->get('prompts')['report_version']);
+        $this->assertTrue($settings->get('spam')['turnstile_enabled']);
+        $this->assertSame('manual', $settings->get('spam')['analysis_mode']);
+        $this->assertSame(14, $settings->operation('resume_days'));
+        $this->assertSame(90, $settings->operation('timeout_seconds'));
+    }
+
+    public function test_operational_settings_filament_form_rejects_unsafe_provider_names(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        Livewire::test(OperationalSettings::class)
+            ->fillForm([
+                'ai.quiz' => [['provider' => 'bad provider', 'model' => 'gpt-test']],
+            ])
+            ->call('save')
+            ->assertHasFormErrors();
     }
 
     public function test_spatie_branding_and_email_settings_pages_render_for_an_administrator(): void
@@ -107,5 +162,55 @@ class AdminCompletionTest extends TestCase
         $this->assertSame(1, ManageBrandingSettings::getNavigationSort());
         $this->assertSame(2, ManageReportEmailSettings::getNavigationSort());
         $this->assertSame(3, OperationalSettings::getNavigationSort());
+    }
+
+    public function test_super_admin_is_an_administrator_superset_of_admin(): void
+    {
+        $superAdmin = User::factory()->create();
+        $superAdmin->syncRoles(['super_admin']);
+        $admin = User::factory()->create();
+        $quizManager = User::factory()->create();
+        $quizManager->syncRoles(['quiz_manager']);
+
+        $this->assertTrue($superAdmin->isAdministrator());
+        $this->assertTrue($admin->isAdministrator());
+        $this->assertFalse($quizManager->isAdministrator());
+        $this->assertTrue($superAdmin->hasRole('super_admin'));
+        $this->assertFalse($superAdmin->hasRole('admin'));
+    }
+
+    public function test_super_admin_can_access_administrator_only_branding_settings_without_the_admin_role(): void
+    {
+        $user = User::factory()->create();
+        $user->syncRoles(['super_admin']);
+
+        $this->actingAs($user)
+            ->get('/admin/manage-branding-settings')
+            ->assertOk()
+            ->assertSee('Brand identity')
+            ->assertSee('Branding & design');
+
+        $this->assertTrue(ManageBrandingSettings::canAccess());
+    }
+
+    public function test_quiz_manager_cannot_access_administrator_only_branding_settings(): void
+    {
+        $user = User::factory()->create();
+        $user->syncRoles(['quiz_manager']);
+
+        $this->actingAs($user)
+            ->get('/admin/manage-branding-settings')
+            ->assertForbidden();
+
+        $this->assertFalse(ManageBrandingSettings::canAccess());
+    }
+
+    public function test_super_admin_role_receives_every_admin_permission(): void
+    {
+        $superAdmin = Role::findByName('super_admin');
+        $admin = Role::findByName('admin');
+
+        $this->assertEmpty($admin->permissions->pluck('name')->diff($superAdmin->permissions->pluck('name'))->all());
+        $this->assertNotEmpty($superAdmin->permissions);
     }
 }

@@ -111,6 +111,8 @@ class CycleTenRuntimeAndOperationsTest extends TestCase
         $analysis = Analysis::factory()->for($submission)->create(['status' => AnalysisStatus::Completed, 'structured_result' => ReportSchema::example()]);
 
         $this->get('/admin/submissions/'.$submission->id.'/edit')->assertRedirect('/admin/login');
+        $this->actingAs($user)->get('/admin/submissions')->assertOk()->assertDontSee('New submission');
+        $this->actingAs($user)->get('/admin/submissions/create')->assertNotFound();
         $this->actingAs($user)->get('/admin/submissions/'.$submission->id.'/edit')->assertOk()->assertSee('Mark spam')->assertSee('Anonymize');
         app(ManageSubmission::class)->markSpam($submission, $user->id);
         app(ManageSubmission::class)->hold($submission, $user->id);

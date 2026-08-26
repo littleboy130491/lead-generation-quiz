@@ -12,7 +12,7 @@
     <form class="quiz-card" method="post" action="{{ route('quizzes.unlock', $quiz) }}">
         @csrf
         <fieldset class="quiz-question">
-            <label class="quiz-field-label" for="password">Quiz password</label>
+            <label class="quiz-field-label" for="password">Quiz password <span class="quiz-required" aria-hidden="true">*</span></label>
             <input class="quiz-input" id="password" type="password" name="password" required autocomplete="current-password" aria-describedby="password-error">
             @error('password')<p class="quiz-error" id="password-error" role="alert">{{ $message }}</p>@enderror
         </fieldset>

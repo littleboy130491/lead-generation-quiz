@@ -25,6 +25,14 @@ class User extends Authenticatable implements FilamentUser
         return $panel->getId() === 'admin';
     }
 
+    public function isAdministrator(): bool
+    {
+        return $this->hasAnyRole([
+            (string) config('filament-shield.super_admin.name', 'super_admin'),
+            'admin',
+        ]);
+    }
+
     /**
      * Get the attributes that should be cast.
      *

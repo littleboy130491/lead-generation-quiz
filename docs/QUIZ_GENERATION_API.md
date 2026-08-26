@@ -14,7 +14,7 @@ The API is server-to-server only. Do not call it from browser JavaScript, mobile
 
 ## Authentication
 
-Every request needs an `Authorization: Bearer` header. Configure the secret only on the server:
+Every request needs an `Authorization: Bearer` header. Configure the secret only on the server (shared with user provisioning — see [USER_PROVISIONING_API.md](USER_PROVISIONING_API.md)):
 
 ```dotenv
 QUIZ_GENERATION_API_TOKEN=<a-64-character-random-secret>

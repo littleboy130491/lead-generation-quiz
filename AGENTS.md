@@ -108,5 +108,8 @@ Do not introduce near-synonyms such as `finished` versus `completed` without upd
 
 - `PRD.md`: authoritative requirements and decisions
 - `docs/IMPLEMENTATION_PLAN.md`: phased, executable delivery plan
+- `docs/SETUP.md`: full install from clone through Curator media token, admin bootstrap, and AI provider configuration
 - `AGENTS.md`: contributor and AI-agent operating rules
 - `README.md`: setup and day-to-day commands; update when onboarding steps change
+- `docs/ADMIN_SETTINGS.md`: branding, email templates, Operational settings, AI chains
+- `docs/QUIZ_GENERATION_API.md` / `docs/USER_PROVISIONING_API.md`: server-to-server APIs

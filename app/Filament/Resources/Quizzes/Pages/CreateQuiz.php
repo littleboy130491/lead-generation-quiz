@@ -2,13 +2,20 @@
 
 namespace App\Filament\Resources\Quizzes\Pages;
 
+use App\Filament\Resources\Quizzes\Concerns\HasGenerateQuizDraftAction;
 use App\Filament\Resources\Quizzes\QuizResource;
 use App\Filament\Resources\Quizzes\Schemas\QuizForm;
+use App\Models\Quiz;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Enums\Width;
 
 class CreateQuiz extends CreateRecord
 {
+    use HasGenerateQuizDraftAction;
+
     protected static string $resource = QuizResource::class;
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
@@ -21,5 +28,22 @@ class CreateQuiz extends CreateRecord
         unset($data['password']);
 
         return $data;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            $this->generateQuizDraftAction(),
+        ];
+    }
+
+    protected function quizForAiDraftGeneration(array $brief): Quiz
+    {
+        return $this->createQuizForAiDraftGeneration($brief);
+    }
+
+    protected function afterAiDraftGenerated(Quiz $quiz): void
+    {
+        $this->redirect(EditQuiz::getUrl(['record' => $quiz]));
     }
 }

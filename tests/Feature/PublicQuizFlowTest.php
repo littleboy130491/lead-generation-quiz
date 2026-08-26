@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\Quizzes\PublishQuizRevision;
 use App\Enums\SubmissionStatus;
+use App\Jobs\GenerateAnalysisJob;
 use App\Models\Quiz;
 use App\Models\Submission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,7 +26,10 @@ class PublicQuizFlowTest extends TestCase
         $response->assertOk()
             ->assertSee('rel="stylesheet"', false)
             ->assertSee('First question')
+            ->assertSee('quiz-required', false)
             ->assertSee('Second question')
+            ->assertSee('type="checkbox"', false)
+            ->assertSee('answers[q2][]', false)
             ->assertSee('Read this safely')
             ->assertDontSee('<script>alert(1)</script>', false)
             ->assertDontSee('Conditional question')
@@ -139,12 +143,55 @@ class PublicQuizFlowTest extends TestCase
         $this->get(route('quizzes.contact', [$quiz, $submission]))
             ->assertOk()
             ->assertSee('rel="stylesheet"', false)
-            ->assertSee('Where should we send your report?');
-        $this->post(route('submissions.finalize', $submission), ['email' => 'Lead@Example.test', 'website' => ''])
-            ->assertRedirect(route('quizzes.complete', [$quiz, $submission]));
+            ->assertSee('Where should we send your report?')
+            ->assertSee('for="email"', false)
+            ->assertDontSee('for="name"', false)
+            ->assertDontSee('for="company"', false)
+            ->assertDontSee('for="phone"', false);
+        $this->post(route('submissions.finalize', $submission), [
+            'email' => 'Lead@Example.test',
+            'website' => '',
+            'name' => 'Should Be Ignored',
+            'company' => 'Acme',
+            'phone' => '555-0100',
+        ])->assertRedirect(route('quizzes.complete', [$quiz, $submission]));
         $this->get(route('quizzes.complete', [$quiz, $submission]))->assertOk()->assertSee('Thank you');
         $this->assertSame(SubmissionStatus::Completed, $submission->fresh()->status);
         $this->assertSame('lead@example.test', $submission->fresh()->email);
+        $this->assertNull($submission->fresh()->name);
+        $this->assertNull($submission->fresh()->company);
+        $this->assertNull($submission->fresh()->phone);
+    }
+
+    public function test_contact_form_shows_only_enabled_lead_capture_fields_and_persists_them(): void
+    {
+        Bus::fake();
+        $quiz = $this->publishedQuiz();
+        $quiz->update(['settings' => ['collect_name' => true, 'collect_company' => false, 'collect_phone' => true]]);
+        $this->get('/'.$quiz->slug);
+        $submission = Submission::firstOrFail();
+        $this->post(route('submissions.save-page', [$submission, 0]), [
+            'answers' => ['q1' => 'yes', 'q2' => ['one']], 'direction' => 'next',
+        ]);
+        $this->post(route('submissions.save-page', [$submission, 1]), ['answers' => ['q3' => 'A detail'], 'direction' => 'next']);
+
+        $this->get(route('quizzes.contact', [$quiz, $submission]))
+            ->assertOk()
+            ->assertSee('for="name"', false)
+            ->assertSee('for="phone"', false)
+            ->assertDontSee('for="company"', false);
+
+        $this->post(route('submissions.finalize', $submission), [
+            'email' => 'lead@example.test',
+            'name' => 'Ada Lovelace',
+            'company' => 'Should Be Ignored',
+            'phone' => '555-0100',
+        ])->assertRedirect(route('quizzes.complete', [$quiz, $submission]));
+
+        $completed = $submission->fresh();
+        $this->assertSame('Ada Lovelace', $completed->name);
+        $this->assertNull($completed->company);
+        $this->assertSame('555-0100', $completed->phone);
     }
 
     public function test_removed_direct_questionnaire_endpoint_cannot_bypass_current_page_validation_or_mutate_a_submission(): void
@@ -175,6 +222,148 @@ class PublicQuizFlowTest extends TestCase
             $this->assertSame($before['latest_touch_context'], $submission->latest_touch_context);
             $this->assertSame($before['event_count'], $submission->events()->count());
         }
+    }
+
+    public function test_gated_opening_shows_start_button_before_questions_and_back_returns_to_opening(): void
+    {
+        $definition = $this->definition();
+        $definition['opening'] = [
+            'html' => '<h2>Welcome opener</h2><p>Read this first.</p><script>alert(1)</script>',
+            'start_button_label' => 'Start my quiz',
+            'hide_start_button' => false,
+        ];
+        $quiz = $this->publishedQuiz($definition);
+
+        $this->get('/'.$quiz->slug)
+            ->assertOk()
+            ->assertSee('Welcome opener')
+            ->assertSee('Start my quiz')
+            ->assertDontSee('<script>alert(1)</script>', false)
+            ->assertDontSee('First question');
+
+        $submission = Submission::firstOrFail();
+        $this->assertFalse((bool) data_get($submission->metadata, 'opening_dismissed'));
+
+        $this->post(route('submissions.dismiss-opening', $submission))
+            ->assertRedirect(route('quizzes.show', $quiz));
+
+        $submission->refresh();
+        $this->assertTrue((bool) data_get($submission->metadata, 'opening_dismissed'));
+        $this->get('/'.$quiz->slug)
+            ->assertOk()
+            ->assertSee('First question')
+            ->assertDontSee('Welcome opener')
+            ->assertDontSee('Start my quiz');
+
+        $this->post(route('submissions.save-page', [$submission, 0]), [
+            'answers' => [],
+            'direction' => 'back',
+        ])->assertRedirect(route('quizzes.show', $quiz));
+
+        $submission->refresh();
+        $this->assertFalse((bool) data_get($submission->metadata, 'opening_dismissed'));
+        $this->get('/'.$quiz->slug)->assertSee('Welcome opener')->assertSee('Start my quiz')->assertDontSee('First question');
+    }
+
+    public function test_inline_opening_renders_above_first_page_without_a_start_button(): void
+    {
+        $definition = $this->definition();
+        $definition['opening'] = [
+            'html' => '<h2>Inline opener</h2><p>Questions begin below.</p>',
+            'start_button_label' => 'Unused label',
+            'hide_start_button' => true,
+        ];
+        $quiz = $this->publishedQuiz($definition);
+
+        $this->get('/'.$quiz->slug)
+            ->assertOk()
+            ->assertSee('Inline opener')
+            ->assertSee('Questions begin below.')
+            ->assertSee('First question')
+            ->assertDontSee('Unused label')
+            ->assertDontSee('Start quiz');
+    }
+
+    public function test_page_answers_are_rejected_while_a_gated_opening_is_pending(): void
+    {
+        $definition = $this->definition();
+        $definition['opening'] = [
+            'html' => '<p>Please start</p>',
+            'start_button_label' => 'Start quiz',
+            'hide_start_button' => false,
+        ];
+        $quiz = $this->publishedQuiz($definition);
+        $this->get('/'.$quiz->slug);
+        $submission = Submission::firstOrFail();
+
+        $this->post(route('submissions.save-page', [$submission, 0]), [
+            'answers' => ['q1' => 'yes', 'q2' => ['one']],
+            'direction' => 'next',
+        ])->assertSessionHasErrors('opening');
+    }
+
+    public function test_questionnaire_completion_stores_score_total_and_matched_result(): void
+    {
+        $definition = $this->definition();
+        $definition['blocks'][0]['yes_score'] = 2;
+        $definition['blocks'][0]['no_score'] = 0;
+        $definition['blocks'][1]['options'][0]['score'] = 1;
+        $definition['blocks'][1]['options'][1]['score'] = 4;
+        $definition['result'] = ['mode' => 'score'];
+        $definition['thank_you'] = ['enabled' => false];
+        $definition['score_results'] = [
+            ['id' => 'starter', 'title' => 'Starter profile', 'min_score' => 0, 'max_score' => 4, 'html' => '<p>Keep building</p><script>alert(1)</script>'],
+            ['id' => 'ready', 'title' => 'Ready profile', 'min_score' => 5, 'max_score' => 20, 'html' => '<p>You are ready</p>'],
+        ];
+        $quiz = $this->publishedQuiz($definition);
+        $this->get('/'.$quiz->slug);
+        $submission = Submission::firstOrFail();
+
+        $this->post(route('submissions.save-page', [$submission, 0]), [
+            'answers' => ['q1' => 'yes', 'q2' => ['two']],
+            'direction' => 'next',
+        ]);
+        $this->post(route('submissions.save-page', [$submission->fresh(), 1]), [
+            'answers' => ['q3' => 'detail'],
+            'direction' => 'next',
+        ])->assertRedirect(route('quizzes.contact', [$quiz, $submission]));
+
+        $submission->refresh();
+        $this->assertSame(6, data_get($submission->metadata, 'scoring.total'));
+        $this->assertSame('ready', data_get($submission->metadata, 'scoring.result.id'));
+        $this->assertSame('Ready profile', data_get($submission->metadata, 'scoring.result.title'));
+
+        $this->get(route('quizzes.contact', [$quiz, $submission]))
+            ->assertOk()
+            ->assertSee('Ready profile')
+            ->assertSee('You are ready')
+            ->assertDontSee('<script>alert(1)</script>', false);
+
+        Bus::fake();
+        $this->post(route('submissions.finalize', $submission), [
+            'email' => 'lead@example.test',
+            'website' => '',
+        ])->assertRedirect(route('quizzes.complete', [$quiz, $submission]));
+        Bus::assertNotDispatched(GenerateAnalysisJob::class);
+        $this->get(route('quizzes.complete', [$quiz, $submission]))
+            ->assertOk()
+            ->assertSee('Ready profile')
+            ->assertSee('You are ready')
+            ->assertDontSee('Thank you');
+    }
+
+    public function test_question_image_and_icon_are_rendered_on_the_public_runner(): void
+    {
+        $definition = $this->definition();
+        $definition['blocks'][0]['image_url'] = 'https://cdn.example.test/first.png';
+        $definition['blocks'][0]['icon'] = '⭐';
+        $quiz = $this->publishedQuiz($definition);
+
+        $this->get('/'.$quiz->slug)
+            ->assertOk()
+            ->assertSee('https://cdn.example.test/first.png', false)
+            ->assertSee('⭐')
+            ->assertSee('First question');
     }
 
     public function test_reserved_quiz_slug_is_rejected_before_it_can_shadow_a_public_route(): void

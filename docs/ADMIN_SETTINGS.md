@@ -4,6 +4,9 @@ The Filament admin panel provides database-backed Spatie Settings pages:
 
 - **Branding & design** — `/admin/manage-branding-settings`
 - **Report email templates** — `/admin/manage-report-email-settings`
+- **Operational settings** — `/admin/operational-settings` (Filament form for quiz/report provider chains, AI system prompts for quiz creation and analysis results, Turnstile/analysis mode, and resume/retention/retry/timeout policy; not JSON)
+
+Branding & design and Report email templates use a single full-width column (`Width::Full`, form `columns(1)`).
 
 ## Branding & design
 
@@ -20,7 +23,7 @@ CSS rejects HTML, `@import`, external `url()`, `javascript:`, and legacy CSS exp
 
 ### Thank-you page HTML
 
-This setting is available only to users with the `admin` role. It accepts static content HTML such as headings, paragraphs, lists, emphasis, links, images, divs, and spans. Content is sanitized immediately before it is displayed: scripts, styles, forms, iframes/embedded content, inline CSS, event attributes, unsafe URLs, and unsupported markup are removed. Stored HTML is **never** evaluated as Blade or PHP and has no placeholder support, so respondent data cannot be injected into the page.
+This setting is available to users with the `super_admin` or `admin` role. `super_admin` is a strict superset of `admin`. It accepts static content HTML such as headings, paragraphs, lists, emphasis, links, images, divs, and spans. Content is sanitized immediately before it is displayed: scripts, styles, forms, iframes/embedded content, inline CSS, event attributes, unsafe URLs, and unsupported markup are removed. Stored HTML is **never** evaluated as Blade or PHP and has no placeholder support, so respondent data cannot be injected into the page.
 
 ## Report email templates
 
@@ -33,15 +36,68 @@ Settings include sender name, optional reply-to address, subject, HTML template,
 
 Report values are escaped when rendered into HTML. Email templates should not contain PHP, Blade execution directives, JavaScript, or secrets.
 
+## Operational settings — AI system prompts
+
+Under **Operational settings**, administrators configure:
+
+- **Quiz creation system prompt** (`prompts.quiz_template`) — used when generating an AI quiz draft. Combined with fixed draft-only safety instructions and snapshotted per request with `prompts.quiz_version`.
+- **Analysis result system prompt** (`prompts.report_template`) — used when generating AI analysis/report results for a submission. Combined with fixed report-schema safety instructions and snapshotted per analysis with `prompts.report_version`. Optional variable: `{{questions_and_answers}}` (all questions and answers except those marked **Exclude from AI context** on the quiz). Per-question `{{question.ID}}` / `{{answer.ID}}` are not allowed here; use a quiz **AI system prompt** override instead.
+
+Provider credentials remain environment-only. Prompts are non-secret bounded text and must not contain PHP open tags.
+
+## Operational settings — AI provider chains
+
+Under **Operational settings**, ordered **Quiz AI provider chain** and **Report AI provider chain** repeaters select non-secret `provider` + `model` pairs. Credentials and optional base URLs are **not** entered here.
+
+### Environment (secrets and URLs)
+
+Configure in `.env` (see `config/ai.php`), then run `php artisan optimize:clear`:
+
+```dotenv
+OPENAI_API_KEY=sk-...
+# OPENAI_URL=https://api.openai.com/v1
+
+ANTHROPIC_API_KEY=...
+# ANTHROPIC_URL=https://api.anthropic.com/v1
+
+GEMINI_API_KEY=...
+# GEMINI_URL=https://generativelanguage.googleapis.com/v1beta/
+
+OPENROUTER_API_KEY=...
+
+OPENAI_COMPATIBLE_API_KEY=...
+OPENAI_COMPATIBLE_URL=https://your-gateway.example/v1
+```
+
+The `provider` field in Operational settings must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`, `openai-compatible`). That provider’s environment key must be set or the chain entry is skipped.
+
+### Models
+
+Enter the model id your account supports (for example `gpt-4.1` for OpenAI). Quiz chain drives Generate AI draft; report chain drives submission analysis.
+
+Full install path including Curator media token: [SETUP.md](SETUP.md).
+
+### Quiz AI system prompt override
+
+On the quiz **Result** tab (AI mode only), an optional **AI system prompt** overrides the global analysis template for that quiz’s revisions. It may use:
+
+- `{{questions_and_answers}}`
+- `{{question.<id>}}` — question label for a quiz question ID
+- `{{answer.<id>}}` — respondent answer for that ID
+
+Questions marked **Exclude from AI context** are omitted from variables and from the frozen AI input snapshot. Substituted values are treated as untrusted respondent data.
+
 ## Data and deployment
 
 Settings are managed by `spatie/laravel-settings`, stored in the `settings` database table, and seeded by a versioned settings migration. They are separate from the existing application operational/AI settings, which retain their closed non-secret validation boundary.
 
-Run after deploying code:
+Run after deploying code (see [SETUP.md](SETUP.md) for the full checklist):
 
 ```bash
 composer install --no-dev --optimize-autoloader
 php artisan migrate --force
+php artisan storage:link
+php artisan curator:token
 php artisan optimize:clear
 ```
 
@@ -51,3 +107,5 @@ Verify the pages and the settings migration:
 php artisan route:list --path=admin/manage-
 php artisan migrate:status
 ```
+
+Media library uploads require a non-empty `CURATOR_GLIDE_TOKEN` (from `php artisan curator:token`) and `php artisan storage:link`.

@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Actions\Submissions\SaveQuizPage;
 use App\Actions\Submissions\StartOrResumeSubmission;
+use App\Domain\Quiz\Opening\QuizOpening;
 use App\Domain\Quiz\Pagination\VisibleQuizPages;
 use App\Enums\SubmissionStatus;
 use App\Models\Quiz;
 use App\Models\Submission;
+use App\Services\CompletionHtmlSanitizer;
 use App\Services\SubmissionContext;
 use App\Services\SubmissionEventRecorder;
 use App\Settings\ApplicationSettings;
@@ -19,7 +21,7 @@ use Illuminate\Validation\ValidationException;
 
 class QuizController extends Controller
 {
-    public function show(Request $request, Quiz $quiz, StartOrResumeSubmission $start, ApplicationSettings $settings, BrandingSettings $branding)
+    public function show(Request $request, Quiz $quiz, StartOrResumeSubmission $start, ApplicationSettings $settings, BrandingSettings $branding, CompletionHtmlSanitizer $html)
     {
         abort_unless($quiz->status->value === 'published' && $quiz->activeRevision, 404);
         if ($quiz->password_hash && ! $this->isUnlocked($request, $quiz)) {
@@ -42,13 +44,29 @@ class QuizController extends Controller
         }
         $request->session()->put('quiz_submission.'.$quiz->id, $submission->id);
 
+        $definition = $submission->quizRevision->definition ?? [];
+        $opening = QuizOpening::fromDefinition($definition);
+        $openingPending = QuizOpening::isPending($definition, $submission);
+        $openingHtml = $opening ? $html->sanitize($opening['html']) : '';
+        $showInlineOpening = QuizOpening::isInlineOnFirstPage($definition, $submission);
+
         $pages = app(VisibleQuizPages::class)->forSubmission($submission, $submission->answers_snapshot ?? []);
         if (! isset($pages[$submission->current_page])) {
             $submission->update(['current_page' => 0]);
             $submission->refresh();
         }
-        $page = $pages[$submission->current_page] ?? [];
-        $response = response()->view('quiz.show', compact('quiz', 'submission', 'pages', 'page', 'branding'));
+        $page = $openingPending ? [] : ($pages[$submission->current_page] ?? []);
+        $response = response()->view('quiz.show', compact(
+            'quiz',
+            'submission',
+            'pages',
+            'page',
+            'branding',
+            'opening',
+            'openingHtml',
+            'openingPending',
+            'showInlineOpening',
+        ));
         if ($token) {
             $response->cookie('quiz_resume_'.$quiz->id, $token, 60 * 24 * $settings->operation('resume_days'), null, null, app()->environment('production'), true, false, 'lax');
         }
@@ -67,6 +85,32 @@ class QuizController extends Controller
         $request->session()->put('quiz_unlocked.'.$quiz->id, now()->addMinutes((int) config('quiz.unlock_minutes', 480))->getTimestamp());
 
         return redirect()->route('quizzes.show', $quiz);
+    }
+
+    public function dismissOpening(Request $request, Submission $submission): RedirectResponse
+    {
+        if ($submission->status !== SubmissionStatus::InProgress) {
+            throw ValidationException::withMessages(['opening' => 'This questionnaire is no longer editable.']);
+        }
+
+        $definition = $submission->quizRevision->definition ?? [];
+        if (! QuizOpening::isGated($definition)) {
+            throw ValidationException::withMessages(['opening' => 'This quiz does not have a startable opening page.']);
+        }
+
+        $metadata = $submission->metadata ?? [];
+        $metadata['opening_dismissed'] = true;
+        Submission::query()->whereKey($submission->id)->update([
+            'metadata' => $metadata,
+            'current_page' => 0,
+            'last_activity_at' => now(),
+        ]);
+        $submission->refresh();
+        app(SubmissionEventRecorder::class)->touch($submission, app(SubmissionContext::class)->capture($request));
+        $submission->refresh();
+        app(SubmissionEventRecorder::class)->record($submission, 'opening_dismissed');
+
+        return redirect()->route('quizzes.show', $submission->quiz);
     }
 
     public function savePage(Request $request, Submission $submission, int $page, SaveQuizPage $save): RedirectResponse

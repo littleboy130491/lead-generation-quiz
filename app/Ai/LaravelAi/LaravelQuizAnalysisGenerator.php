@@ -2,6 +2,7 @@
 
 namespace App\Ai\LaravelAi;
 
+use App\Ai\ConfiguredAiProviders;
 use App\Ai\Contracts\QuizAnalysisGenerator;
 use App\Ai\Data\ReportSchema;
 use App\Ai\GenerationException;
@@ -11,17 +12,18 @@ use Laravel\Ai\Enums\Lab;
 
 class LaravelQuizAnalysisGenerator implements QuizAnalysisGenerator
 {
-    public function __construct(private AnalysisPromptBuilder $prompts) {}
+    public function __construct(private AnalysisPromptBuilder $prompts, private ConfiguredAiProviders $configured) {}
 
     public function generate(array $revision, array $answers, array $chain, string $systemPrompt): array
     {
         $attempts = [];
-        foreach ($chain as $entry) {
-            $provider = $entry['provider'] ?? null;
-            $model = $entry['model'] ?? null;
-            if (! is_string($provider) || ! is_string($model) || ! config("ai.providers.{$provider}.key")) {
-                continue;
-            }
+        $usable = $this->configured->usable($chain);
+        if ($usable === []) {
+            throw new GenerationException('ai_unavailable', ConfiguredAiProviders::UNAVAILABLE_MESSAGE);
+        }
+        foreach ($usable as $entry) {
+            $provider = $entry['provider'];
+            $model = $entry['model'];
             try {
                 $prompt = $this->prompts->buildFromSnapshot($systemPrompt, $revision, $answers);
                 $response = \Laravel\Ai\agent(instructions: $prompt->system, schema: fn (JsonSchema $schema) => $this->schema($schema))->prompt($prompt->user, provider: Lab::from($provider), model: $model, timeout: 60);
@@ -32,9 +34,6 @@ class LaravelQuizAnalysisGenerator implements QuizAnalysisGenerator
             } catch (\Throwable $e) {
                 $attempts[] = compact('provider', 'model') + ['status' => 'failed', 'code' => 'provider_failure', 'message' => str($e->getMessage())->limit(500)->toString()];
             }
-        }
-        if ($attempts === []) {
-            throw new GenerationException('ai_unavailable', 'No configured AI provider credentials are available.');
         }
         throw new GenerationException('ai_generation_failed', 'All configured AI providers failed.', $attempts);
     }

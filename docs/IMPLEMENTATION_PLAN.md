@@ -85,7 +85,7 @@ Baseline already expected:
 - Symfony Mailgun and HTTP client transports.
 - SQLite local database and default queue tables.
 
-Verification:
+Verification (after following [docs/SETUP.md](SETUP.md) locally):
 
 ```bash
 composer validate --strict
@@ -96,6 +96,8 @@ php artisan test
 npm install
 npm run build
 ```
+
+Ensure `php artisan storage:link` and `php artisan curator:token` have been run before exercising Media uploads.
 
 ### 0.2 Baseline configuration
 
@@ -251,15 +253,16 @@ Password behavior:
 
 ### 3.2 Block builder
 
-Use Filament builder/repeater components with stable IDs and drag ordering. The MVP form must expose name, unique non-reserved slug validation, draft default status, hash-only password input, and non-secret lead-capture settings. On edit, hydrate the stored definition into Builder state and omit `password_hash`; a blank password means unchanged.
+Use Filament builder/repeater components with stable IDs and drag ordering. Create and edit quiz pages are a single full-width column (`Width::Full`, form `columns(1)`). Builder items are collapsible. The MVP form must expose name, unique non-reserved slug validation, draft default status, hash-only password input, non-secret lead-capture settings, and an optional opening page (HTML, start-button label, hide-start-button). On edit, hydrate the stored definition into Builder state and omit `password_hash`; a blank password means unchanged.
 
 Block editors:
 
-- Question with type-specific fields, requiredness, help text, repeatable options, and structured visibility fields.
+- Question with type-specific fields, requiredness, help text, optional image URL and/or plain-text icon, repeatable options (optional integer score), optional yes/no scores, and structured visibility fields.
 - Content with Markdown, optional continue label, and structured visibility fields.
 - Visual page-break separator.
+- Optional score-result bands (`id`, title, min/max score, optional HTML) for predetermined outcomes from the total score.
 
-Transform Builder items to `{schema_version: 1, blocks: [...]}` before persistence and reverse that transform for editing. Do not save array positions as identity or add arbitrary raw script fields.
+Transform Builder items to `{schema_version: 1, result?: {mode}, opening?: {...}, score_results?: [...], thank_you?: {...}, blocks: [...]}` before persistence and reverse that transform for editing. The Filament quiz form uses Settings / Quiz / Result / Thank you tabs. Do not save array positions as identity or add arbitrary raw script fields. Opening HTML is sanitized at public render with the thank-you allowlist; gated openings dismiss via submission metadata before page 0. Score-mode questionnaire completion computes scoring snapshots; AI mode queues automatic analysis and always shows thank-you (global or override).
 
 ### 3.3 Conditions editor
 
@@ -330,7 +333,7 @@ The current-page server-side save action is the sole public questionnaire mutati
 `FinalizeSubmission`:
 
 1. Locks the submission row.
-2. Verifies `awaiting_contact` and valid email/contact fields.
+2. Verifies `awaiting_contact` and a valid email. Name, company, and phone are accepted only when the quiz `collect_*` settings are enabled; otherwise they are omitted from the public form and discarded if posted.
 3. Runs anti-spam acceptance checks.
 4. Freezes the final human-readable answer snapshot.
 5. Marks completed.
@@ -377,7 +380,7 @@ System instructions must specify:
 
 ### 6.3 Admin generation flow
 
-Filament action collects business context, target audience, objective, desired insight, count, and tone. Generation runs in a queue if response time can exceed a normal admin request. Validate returned definition and present a diff/preview before applying it to the draft.
+Filament action collects business context, target audience, objective, desired insight, count, and tone. When the persisted `ai.quiz` chain has no usable environment credentials, the modal explains that and disables Confirm rather than throwing into the panel. Generation runs in a queue if response time can exceed a normal admin request. Validate returned definition and present a diff/preview before applying it to the draft.
 
 Tests fake the Laravel AI SDK and prove invalid output cannot overwrite a draft.
 
@@ -391,11 +394,12 @@ Finalize and document a versioned schema for executive summary, profile, strengt
 
 Create a prompt builder that:
 
-- Includes only frozen revision context and frozen answers.
-- Clearly delimits respondent data as untrusted.
+- Includes only frozen revision context and frozen answers, omitting questions marked `exclude_from_ai`.
+- Substitutes approved prompt variables (`{{questions_and_answers}}` globally; plus `{{question.ID}}` / `{{answer.ID}}` on quiz overrides).
+- Clearly delimits respondent data as untrusted (including substituted variable values).
 - Instructs the model never to follow respondent instructions.
 - Includes no secrets or unrelated submissions.
-- Captures exact system-prompt and input snapshots on `Analysis`.
+- Captures exact system-prompt and filtered input snapshots on `Analysis`.
 
 Unit tests assert malicious respondent text remains inside the untrusted-data envelope and cannot alter system instructions structurally.
 
@@ -480,13 +484,13 @@ Provide quiz/revision-filtered counts and conversion rates for starts, questionn
 
 Implement:
 
-- Ordered provider/model chains separately for quiz and report generation.
+- Ordered provider/model chains separately for quiz and report generation as Filament repeaters on Operational settings, not JSON textareas.
 - Cheap connection and structured-output tests with redacted failures.
-- Design token editor and additional CSS.
+- Design token editor and additional CSS on Branding & design (single full-width column: `Width::Full`, form `columns(1)`).
 - Administrator-only static thank-you HTML with a server-side structural allowlist; it must not evaluate Blade/PHP/JavaScript or interpolate respondent data.
-- Email templates and preview.
-- Prompt templates/version labels.
-- Resume, retention, retry, timeout, and spam settings.
+- Email templates and preview on Report email templates (same full-width single-column layout as Branding & design).
+- Prompt templates/version labels as Filament fields on Operational settings.
+- Resume, retention, retry, timeout, and spam settings as Filament fields on Operational settings.
 
 Completion requirement: settings are not merely persisted. Keep `ApplicationSettings` as the closed validation boundary and feature-test each runtime consumer: `ai.quiz` and `ai.report` chains, prompt snapshots, controlled email renderer, public design CSS/tokens, Turnstile/analysis mode, resume/retention, and recovery/lease timeout. Reject secrets, unknown nested fields, executable template syntax, and unsafe CSS.
 
@@ -566,6 +570,8 @@ Implemented as a cohesive baseline: Phase 1 schema/models/enums/factories; Phase
 Cycle-4 repair tightens the V1 publish boundary with regression tests for missing labels/content, choice option completeness/uniqueness, nested logical groups, earlier-only dependencies, typed operands, and invalid page breaks. It persists execution lease/generation fencing on analyses and deliveries; jobs renew and conditionally complete only their owned generation while recovery invalidates stale owners before redispatch. Operational Settings is now an authenticated persistent non-secret configuration surface for separated quiz/report provider chains, prompt/version labels, report email templates, design overrides, spam policy, and resume/retention/retry/timeout policy; provider credentials remain environment-only. Quiz duplication produces a detached editable draft, and AI draft generation is fakeable, validates generated V1 JSON, treats the brief as untrusted, and never publishes. The signed Mailgun webhook is narrowly CSRF-exempt while retaining signature validation. Submission attribution is implemented with immediate first touch, latest touch, technically append-only context snapshots/events, and Filament inspection/filtering. Query capture is attribution-only: an explicit UTM/click-ID/campaign allowlist drops all non-attribution keys recursively, preventing answers, contact data, cookies, sessions, form payloads, and secrets from entering context snapshots. The V1 definition validator is closed to unsupported persisted keys and enforces declared field types and bounds.
 
 Cycle-10 makes the persisted settings surface operational: strict non-secret structured validation feeds AI chains, prompt snapshots, escaped report templates, public safe design CSS/tokens, spam policy, resume/retention, recovery limits, and lease timeout. The Submission resource now exposes operational actions and bulk actions; management services preserve frozen history while appending analysis/delivery/event records. Focused tests cover setting consumers, hostile setting values, scheduler/runtime policy, and authorized operational service/history behavior. Independent review remains required; external provider activation still needs deployment credentials.
+
+Shield `super_admin` is seeded as a strict permission-and-access superset of `admin`. Administrator-only pages, including Branding & design, authorize through `User::isAdministrator()` so a super admin is never excluded by an `admin`-only role check. Operational settings is a Filament form over `ApplicationSettings` (repeaters, toggles, numeric inputs) rather than JSON textareas.
 
 Cycle-11 makes quiz-definition generation audit-safe: `quiz_draft_generations` appends a credential-free request record before provider invocation with a hashed sanitized brief/result, captured `ai.quiz` chain, `prompts.quiz_version`, and complete composed quiz prompt. The generator receives those captured values rather than rereading settings, and draft JSON remains only validated V1 definition content. Model guards distinguish frozen payload/history writes from lifecycle transitions: questionnaire completion can freeze answers, query-fenced queue/recovery work remains operational, live PII anonymization remains permitted, and an accepted delivery may transition via signed webhook to a terminal outcome without content mutation. Regression coverage proves request-time snapshot isolation, audit immutability, prohibited direct payload/deletion writes, and allowed delivery transition. Independent review remains required.
 

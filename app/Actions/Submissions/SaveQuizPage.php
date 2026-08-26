@@ -2,6 +2,7 @@
 
 namespace App\Actions\Submissions;
 
+use App\Domain\Quiz\Opening\QuizOpening;
 use App\Domain\Quiz\Pagination\VisibleQuizPages;
 use App\Enums\SubmissionStatus;
 use App\Models\Submission;
@@ -23,6 +24,11 @@ class SaveQuizPage
     {
         if ($submission->status !== SubmissionStatus::InProgress) {
             throw ValidationException::withMessages(['submission' => 'This questionnaire is no longer editable.']);
+        }
+
+        $definition = $submission->quizRevision->definition ?? [];
+        if (QuizOpening::isPending($definition, $submission)) {
+            throw ValidationException::withMessages(['opening' => 'Complete the opening page before answering questions.']);
         }
 
         $answers = $submission->answers_snapshot ?? [];
@@ -76,6 +82,17 @@ class SaveQuizPage
         $this->events->record($submission, 'page_saved', ['page' => $page, 'direction' => $direction]);
 
         if ($direction === 'back') {
+            if ($page === 0 && QuizOpening::isGated($definition)) {
+                $metadata = $submission->metadata ?? [];
+                $metadata['opening_dismissed'] = false;
+                Submission::query()->whereKey($submission->id)->update([
+                    'metadata' => $metadata,
+                    'current_page' => 0,
+                ]);
+
+                return $submission->fresh();
+            }
+
             Submission::query()->whereKey($submission->id)->update(['current_page' => max(0, $page - 1)]);
 
             return $submission;

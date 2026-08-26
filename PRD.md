@@ -2,7 +2,7 @@
 
 **Status:** Initial approved baseline
 **Product phase:** Scaffold / pre-MVP implementation
-**Last updated:** 2026-08-25
+**Last updated:** 2026-08-26
 **Authority:** This document is the source of truth for product behavior and architecture.
 
 ## Document governance
@@ -49,6 +49,15 @@ An authenticated operator who can:
 - Inspect every report-delivery attempt and provider event.
 - Configure non-secret AI provider/model priority and application settings.
 
+Filament Shield roles for this operator:
+
+- `super_admin`: unrestricted administrator. It is a strict superset of `admin` and can access every administrator-only surface that `admin` can, including Branding & design.
+- `admin`: full administrator for quizzes, submissions, users, and settings, including Branding & design.
+- `quiz_manager`: quiz operations only.
+- `submission_manager`: submission operations only.
+
+Administrator-only UI, including Branding & design and its thank-you HTML field, is available to `super_admin` and `admin`. Role checks must not treat `admin` as higher than `super_admin`.
+
 ### 3.2 Respondent — MVP
 
 An anonymous visitor who can:
@@ -93,6 +102,7 @@ A respondent who authenticates passwordlessly by an email OTP and can view quiz 
 - Rate limits, honeypot, Turnstile, validation, and basic spam controls.
 - Configurable design tokens, additional CSS, email templates, and AI prompts.
 - A server-to-server Bearer-token API for AI-assisted quiz-draft creation and optional immutable publication.
+- A server-to-server Bearer-token API for provisioning administrator panel users with allowlisted Shield roles.
 - Filament Shield role-based administration, user-role assignment, and filtered CSV/XLSX table exports for quizzes and submissions.
 
 ### Deferred
@@ -116,7 +126,7 @@ A respondent who authenticates passwordlessly by an email OTP and can view quiz 
 6. Progress is validated and saved server-side on page navigation; the cookie stores no answers or PII.
 7. Conditional visibility is evaluated in the browser for responsiveness and repeated on the server for authority.
 8. After the last questionnaire page passes validation, the submission becomes `awaiting_contact` and `questionnaire_completed_at` is set.
-9. The respondent sees a dedicated email-capture page and provides at least a valid email address.
+9. The respondent sees a dedicated email-capture page and provides at least a valid email address. Name, company, and phone appear only when the quiz's corresponding lead-capture settings are enabled; disabled fields are omitted from the form and ignored if submitted.
 10. Anti-spam checks run before acceptance.
 11. An accepted submission becomes `completed` and receives exactly one initial automatic analysis record.
 12. A generation job processes the analysis using the configured provider/model failover chain.
@@ -146,8 +156,8 @@ After conditional visibility evaluation, a page with no visible renderable block
 
 MVP types:
 
-- `single_choice`
-- `multiple_choice`
+- `single_choice` — radio control; one selected option
+- `multiple_choice` — checkbox group; zero or more selected options (required means at least one when the question is visible)
 - `yes_no`
 - `short_text`
 - `long_text`
@@ -161,15 +171,46 @@ Each question defines:
 - Validation constraints appropriate to its type.
 - Options for choice-based types.
 - Optional structured visibility expression.
-- Optional presentation settings.
+- Optional presentation settings, including an optional public `image_url` (http/https, ≤2,048 characters) and/or a plain-text `icon` (emoji or short label, ≤32 characters, no HTML/markup). When both are present the public runner shows the image and may also show the icon; neither field is required.
 
-Each choice option defines a stable ID, machine value, display label, and optional explanatory text or media.
+Each choice option defines a stable ID, machine value, display label, optional integer `score`, and optional explanatory text or media. Yes/no questions may optionally define integer `yes_score` and `no_score`. Text questions do not contribute to scoring. Scores are optional; when omitted they contribute zero.
 
-### 6.2 Content blocks
+### 6.2 Results
+
+Each quiz chooses a revision-frozen result mode via `result.mode`:
+
+- `ai` (default): after contact capture the platform queues automatic AI report analysis subject to spam/`analysis_mode` policy. Predetermined score bands are not used.
+- `score`: results are predetermined score bands. Automatic AI analysis is not queued for that revision. At least one `score_results` band is required.
+
+`score_results` is an ordered list of predetermined outcome bands keyed by total score. Each band permits only stable `id`, display `title`, integer `min_score`, integer `max_score` (`min_score` ≤ `max_score`), and optional static `html` (same allowlist and limits as opening/thank-you HTML). Band IDs are unique. Inclusive score ranges must not overlap. Unsupported keys are rejected. When `result.mode` is `ai`, `score_results` must be omitted.
+
+At questionnaire completion in `score` mode the server sums scores for visible answered choice and yes/no questions from the frozen revision (selected multiple-choice options sum), matches the first band whose inclusive range contains the total, and stores a non-secret scoring snapshot on the submission metadata. Matched result HTML is sanitized at render time and never evaluates Blade, PHP, JavaScript, or respondent data.
+
+### 6.2.1 Thank-you page
+
+Thank-you presentation is revision-frozen under optional `thank_you` with `enabled` (boolean) and optional override `html` (same static allowlist as Branding thank-you HTML, ≤40,000 characters). Blank override HTML means the global Branding & design thank-you HTML is used.
+
+Rules:
+
+- In `ai` mode the thank-you page is always enabled after completion.
+- In `score` mode administrators may disable the thank-you page. When disabled, the completion surface shows the matched predetermined result instead of the thank-you HTML.
+- When enabled, completion renders quiz override HTML if present, otherwise the global Branding thank-you HTML.
+
+### 6.3 Opening page
+
+A quiz may optionally define a revision-frozen opening page on the definition root. When present, opening permits only `html`, optional `start_button_label`, and optional boolean `hide_start_button`. Opening HTML is administrator-authored static markup (maximum 40,000 characters) rendered through the same server-side structural allowlist as Branding thank-you HTML: it never evaluates Blade, PHP, or JavaScript and never interpolates respondent data. Unsupported keys and executable markup patterns are rejected at publish validation.
+
+Public behavior:
+
+- When `hide_start_button` is false or omitted, the opening is a gated intro shown before questionnaire pages. The start button uses `start_button_label` (nonblank ≤200 characters; default `Start quiz`). Dismissing the opening is recorded on the in-progress submission metadata so resume continues into the questionnaire; Back from the first questionnaire page returns to the opening.
+- When `hide_start_button` is true, the sanitized opening HTML renders above the first questionnaire page with no start button, so the first visible questions appear directly below the opening.
+- When opening is omitted or has no HTML, the questionnaire begins as today.
+
+### 6.4 Content blocks
 
 Content blocks may contain sanitized Markdown, Curator media references, layout metadata, and a continue-button label when used as an informational intermission. Raw executable PHP, Blade, or JavaScript is prohibited.
 
-### 6.3 Conditions
+### 6.5 Conditions
 
 Conditions are structured data, never executable code. MVP logical groups support `all` and `any`. MVP operators should include:
 
@@ -183,7 +224,7 @@ Conditions are structured data, never executable code. MVP logical groups suppor
 - `greater_than`
 - `less_than`
 
-Conditions may reference only earlier questions in the effective flow. Publish validation rejects missing references, invalid values, incompatible operators, and circular/impossible dependency structures. Version-1 definitions are a closed persisted contract: the root permits only `schema_version` and an ordered `blocks` list; a question permits only `id`, `type`, `question_type`, `label`, nullable `help`, optional boolean `required`, text-only bounded integer `max_length`, `options`, and nullable `visibility`; content permits only `id`, `type`, `markdown`, nullable `continue_label`, and nullable `visibility`; and page breaks permit only `id` and `type`. Options permit only stable `id`, machine `value`, and display `label`. Stable IDs are 1–100 ASCII alphanumeric/underscore/hyphen characters beginning alphanumerically. Labels are nonblank ≤500 characters, help ≤2,000, content Markdown ≤10,000, continue labels ≤200, choice options are ordered lists of 1–50, `short_text.max_length` is 1–1,000, and `long_text.max_length` is 1–10,000. Unsupported keys, non-boolean `required`, non-list blocks/options, and unsupported persisted presentation/media/script fields are rejected. Condition groups are recursive nonempty `all`/`any` objects, leaves have only `question_id`, `operator`, and compatible operands, and the editor serializes that contract rather than executable expressions.
+Conditions may reference only earlier questions in the effective flow. Publish validation rejects missing references, invalid values, incompatible operators, and circular/impossible dependency structures. Version-1 definitions are a closed persisted contract: the root permits only `schema_version`, optional `opening`, optional `result`, optional `score_results`, optional `thank_you`, and an ordered `blocks` list; `result` permits only `mode` (`ai`|`score`) and, for AI mode only, optional bounded `system_prompt`; `thank_you` permits only optional boolean `enabled` and optional `html`; opening permits only `html`, optional `start_button_label`, and optional boolean `hide_start_button`; score-result bands permit only `id`, `title`, `min_score`, `max_score`, and optional `html`; a question permits only `id`, `type`, `question_type`, `label`, nullable `help`, optional boolean `required`, text-only bounded integer `max_length`, `options`, optional integer `yes_score`/`no_score` for yes/no questions, optional `image_url`, optional `icon`, optional boolean `exclude_from_ai` (default false: include in AI context), and nullable `visibility`; content permits only `id`, `type`, `markdown`, nullable `continue_label`, and nullable `visibility`; and page breaks permit only `id` and `type`. Options permit only stable `id`, machine `value`, display `label`, and optional integer `score`. Stable IDs are 1–100 ASCII alphanumeric/underscore/hyphen characters beginning alphanumerically. Labels are nonblank ≤500 characters, help ≤2,000, content Markdown ≤10,000, continue labels ≤200, opening/score-result HTML ≤40,000, start button labels ≤200, titles ≤500, icons ≤32, image URLs ≤2,048 http/https only, choice options are ordered lists of 1–50, score-result bands are ordered lists of 1–50 when present, integer scores are −10,000–10,000, `short_text.max_length` is 1–1,000, and `long_text.max_length` is 1–10,000. Unsupported keys, non-boolean `required`/`hide_start_button`, non-list blocks/options/bands, and unsupported persisted presentation/media/script fields are rejected. Condition groups are recursive nonempty `all`/`any` objects, leaves have only `question_id`, `operator`, and compatible operands, and the editor serializes that contract rather than executable expressions.
 
 ## 7. Quiz lifecycle and revisioning
 
@@ -343,7 +384,7 @@ Every send or resend appends a delivery record. Only one automatic delivery may 
 
 ### 10.7 Settings and templates
 
-Application settings are a closed, validated non-secret key/value contract: `ai.quiz`, `ai.report`, `prompts`, `report.email`, `design`, `spam`, and `operations`. Every group has a runtime consumer: quiz/report chains select SDK candidates; prompt templates/version labels are snapshotted with generated work; email subject/templates are substituted through a fixed escaped-placeholder renderer; validated design tokens/CSS are applied to public quiz pages; spam controls govern Turnstile and automatic-analysis policy; and operations governs resume expiry/cookies, retention token scrubbing, recovery attempt limits, and job lease timeout. Provider credentials remain environment-backed Laravel configuration. Unknown keys, secret-like fields, executable template syntax, unsafe CSS, and unsafe token values are rejected.
+Application settings are a closed, validated non-secret key/value contract: `ai.quiz`, `ai.report`, `prompts`, `report.email`, `design`, `spam`, and `operations`. The Filament Operational settings page edits `ai.quiz`, `ai.report`, `prompts`, `spam`, and `operations` through structured fields (ordered provider/model repeaters, prompt inputs, Turnstile/analysis-mode controls, and numeric resume/retention/retry/timeout fields). It never accepts raw JSON, secrets, or provider credentials. Dedicated Branding & design and Report email templates pages edit public design and email presentation. Runtime consumers remain: quiz/report chains select SDK candidates; prompt templates/version labels are snapshotted with generated work; email subject/templates are substituted through a fixed escaped-placeholder renderer; validated design tokens/CSS are applied to public quiz pages; spam controls govern Turnstile and automatic-analysis policy; and operations governs resume expiry/cookies, retention token scrubbing, recovery attempt limits, and job lease timeout. Provider credentials remain environment-backed Laravel configuration. Unknown keys, secret-like fields, executable template syntax, unsafe CSS, and unsafe token values are rejected.
 
 ## 11. Submission and analysis invariants
 
@@ -368,13 +409,19 @@ Concrete Laravel AI implementations translate application settings into SDK call
 
 The administrator supplies audience, objective, business context, desired insight, question count, and tone. At the moment of each request, the application snapshots the persisted `ai.quiz` chain and the complete quiz system prompt derived from `prompts.quiz_version` and `prompts.quiz_template`, creates its append-only audit record, then invokes only those snapshots. Settings changes after request cannot alter that invocation. AI returns a structured proposed definition. The application validates schema, identifiers, options, page breaks, and conditions. The proposal remains a draft until an administrator reviews, previews, and publishes it; audit data is not embedded in the definition.
 
+When no `ai.quiz` chain entry has a matching environment provider key, the Generate AI draft header action remains visible on quiz create and edit. Opening it shows the brief form with an explanation that credentials are unavailable and disables Confirm. It does not hide the action or throw a generation exception into the administrator UI. Programmatic generation (API, jobs) still raises `GenerationException` with `ai_unavailable`.
+
 ### 12.1a Server-to-server quiz-generation API
 
 `POST /api/v1/quizzes/generate` is a narrow server-to-server interface over the same draft-generation and optional publication actions. It accepts only allowlisted quiz metadata plus the documented structured brief; it does not accept arbitrary prompts, raw definitions, credentials, or frontend code. Authentication is a single environment-only `QUIZ_GENERATION_API_TOKEN` Bearer secret, compared in constant time and required even when the value is absent (fail closed). The route is rate-limited to 20 requests/minute. `publish: false` returns an editable draft; `publish: true` creates a new immutable active revision. Failed provider attempts retain their draft and append-only audit row for authorized inspection, return only normalized non-secret errors, and are never silently deleted. The comprehensive request/response, error, authentication, rotation, and operational contract is normative in `docs/QUIZ_GENERATION_API.md`.
 
+### 12.1b Server-to-server user provisioning API
+
+`POST /api/v1/users` creates an administrator panel user with one or more allowlisted Filament Shield roles (`super_admin`, `admin`, `quiz_manager`, `submission_manager`). It accepts only name, email, password, roles, and optional `email_verified`; it never accepts arbitrary permissions, secrets beyond the password being hashed, or panel configuration. Authentication uses the same environment-only `QUIZ_GENERATION_API_TOKEN` Bearer secret and fail-closed constant-time comparison as the quiz-generation API, and shares the 20 requests/minute throttle. Passwords are hashed before storage and never returned. Roles must already exist from `AdminRoleSeeder`. The comprehensive contract is normative in `docs/USER_PROVISIONING_API.md`.
+
 ### 12.2 Analysis AI
 
-The analysis agent receives one frozen quiz revision and one frozen answer snapshot. It has no tools, browsing, cross-submission retrieval, or conversation memory. It returns structured report data such as:
+The analysis agent receives one frozen quiz revision and one frozen answer snapshot, after omitting questions marked `exclude_from_ai` (and their answers) from AI context. By default every question is included. The composed analysis system prompt is the fixed report-schema safety instruction plus either the quiz `result.system_prompt` override (when nonblank in AI mode) or the global `prompts.report_template`. Templates may use `{{questions_and_answers}}` for included Q&A only. Quiz overrides may also use `{{question.<id>}}` and `{{answer.<id>}}` for IDs in the revision; excluded IDs resolve empty. Substituted values are wrapped as untrusted prompt data. Unknown placeholders are rejected at settings save or publish validation. Analysis `input_snapshot` stores the filtered revision/answers sent to the model; the submission still retains the full answer snapshot. It has no tools, browsing, cross-submission retrieval, or conversation memory. It returns structured report data such as:
 
 - Executive summary
 - Profile
@@ -477,9 +524,10 @@ Future policy modes are reserved as:
 ### Quiz resource
 
 - Overview and lifecycle state.
-- The MVP builder exposes name, unique non-reserved slug, draft status default, non-secret lead-capture settings, and an optional password input that is hashed on save and blanked on edit; no raw password/hash is rendered back to the browser.
-- The ordered JSON builder exposes only `question`, sanitized-Markdown `content`, and `page_break` blocks. Question blocks provide stable ID, type, label, help, requiredness, repeatable choice options, and structured visibility fields; content provides stable ID, Markdown, continue label, and structured visibility fields. It intentionally has no arbitrary script field.
-- Block builder with drag-and-drop questions, content, and page breaks.
+- The quiz create/edit form is split into tabs: **Settings** (identity, access/lead capture, opening), **Quiz** (block builder; questions may exclude themselves from AI context), **Result** (AI vs predetermined score mode, optional AI system prompt override, and score-result builder), and **Thank you** (enabled flag for score mode, optional HTML override of the global Branding thank-you). Unchecked lead-capture fields are not shown on the public contact form. Password input is hashed on save and blanked on edit.
+- Create and edit quiz pages are a single full-width column so the builder uses the available panel width rather than Filament's default two-column, 7xl-capped form.
+- The ordered JSON builder exposes only `question`, sanitized-Markdown `content`, and `page_break` blocks. Question blocks provide stable ID, type, label, help, requiredness, optional image URL/icon, repeatable choice options with optional scores, optional yes/no scores, and structured visibility fields; content provides stable ID, Markdown, continue label, and structured visibility fields. Optional score-result bands map total scores to predetermined titles/HTML. It intentionally has no arbitrary script field.
+- Block builder with drag-and-drop questions, content, and page breaks; builder items are collapsible so long drafts stay scannable.
 - Conditions editor.
 - Design and CSS configuration.
 - Report and email configuration.
@@ -487,10 +535,11 @@ Future policy modes are reserved as:
 - Publish action creating a revision.
 - Revision history.
 - Submission and funnel analytics.
-- AI draft-generation action.
+- AI draft-generation action on quiz create and edit. The header action is always visible. When no `ai.quiz` chain entry has usable environment credentials, the modal explains that and disables Confirm; it does not hide the action.
 
 ### Submission resource
 
+- Submissions are created only by the public quiz flow. The admin Submission resource does not offer a create action or create page.
 - Quiz/revision, email, timestamps, status, analysis count/state, and delivery state.
 - Frozen answer viewer.
 - First/latest attribution context, device/browser fields, filters, and append-only event timeline viewer; this operational UI must not expose raw cookies, secrets, or answer/contact data beyond the existing authorized frozen viewer.
@@ -505,11 +554,11 @@ Future policy modes are reserved as:
 
 ### Settings
 
-- Structured design tokens and additional CSS.
-- Email templates.
+- Branding & design and Report email templates are single full-width columns (`Width::Full`, form `columns(1)`) so fields use the available panel width rather than Filament's default two-column, 7xl-capped form.
+- Structured design tokens and additional CSS on Branding & design.
+- Email templates on Report email templates.
+- Operational settings as a Filament form: ordered quiz/report provider/model repeaters; AI system prompts for quiz creation (`prompts.quiz_template`) and analysis results (`prompts.report_template`, optional `{{questions_and_answers}}`) with version labels; Turnstile/analysis mode; and resume/retention/retry/timeout numeric fields. Administrators do not edit these as raw JSON.
 - Separate system prompts/provider chains for quiz creation and report generation.
-- Ordered enabled provider/model repeaters with connection/structured-output tests.
-- Spam, retention, retry, and timeout settings.
 
 Provider keys are not displayed or stored in ordinary settings.
 
@@ -587,11 +636,103 @@ Report generation uses an application-owned Laravel AI SDK adapter and versioned
 
 Report rendering uses controlled Blade HTML/text templates and escaped structured fields. `RequestReportDelivery` appends delivery attempts; its automatic key is unique only within its analysis while manual resend paths always append. Send jobs claim queued records, use an application-owned Laravel Mail transport adapter, persist its provider message ID when available, and normalize failures; `reports:dispatch-unsent` reconciles queued records without resending accepted/delivered records. Mailgun webhook handling remains credential-gated: it HMAC-verifies the timestamp/token signature, looks up only that persisted provider message ID, and does not regress terminal delivery states.
 
-The public respondent runner is a server-authoritative Blade flow. It compiles the frozen linear revision on each render, filters blocks with the condition evaluator, and skips pages left empty by filtering. It validates typed values only for questions on the current server-tracked page; Back and Next persist answers and `current_page` server-side, then a completed questionnaire redirects to the dedicated contact page. The obsolete direct questionnaire-completion POST is intentionally not routed, so it cannot supply arbitrary answer snapshots outside the current-page validator. The encrypted opaque resume cookie contains only the resume token. Password unlock state is time-bounded in Laravel session state, while protected submission routes require session ownership or the matching resume token. Quiz Markdown is rendered through a controlled renderer that strips raw HTML, and reserved public-route slugs plus start, unlock, progress, and contact limits are enforced server-side. All public questionnaire, unlock, contact-capture, and completion pages use the shared non-executable quiz stylesheet, while validated design settings may provide only the existing constrained token/CSS overrides. The idempotent `LeadGenerationQuizSeeder` supplies a published `business-readiness-check` example with an immutable active revision for local/demo verification; it never rewrites an existing published revision.
+The public respondent runner is a server-authoritative Blade flow. It compiles the frozen linear revision on each render, filters blocks with the condition evaluator, and skips pages left empty by filtering. When a gated opening is present, the runner shows sanitized opening HTML and the configured start label before questionnaire pages and records dismissal on submission metadata; when hide-start-button is set, opening HTML renders above the first page. Required questionnaire questions, the contact email field, and the unlock password field show a visible `*` marker beside their labels. It validates typed values only for questions on the current server-tracked page; Back and Next persist answers and `current_page` server-side, then a completed questionnaire redirects to the dedicated contact page. The obsolete direct questionnaire-completion POST is intentionally not routed, so it cannot supply arbitrary answer snapshots outside the current-page validator. The encrypted opaque resume cookie contains only the resume token. Password unlock state is time-bounded in Laravel session state, while protected submission routes require session ownership or the matching resume token. Quiz Markdown is rendered through a controlled renderer that strips raw HTML, and reserved public-route slugs plus start, unlock, progress, and contact limits are enforced server-side. All public questionnaire, unlock, contact-capture, and completion pages use the shared non-executable quiz stylesheet, while validated design settings may provide only the existing constrained token/CSS overrides. The idempotent `LeadGenerationQuizSeeder` supplies a published `business-readiness-check` example with an immutable active revision for local/demo verification; it never rewrites an existing published revision.
 
-The administrator-only Branding & design settings page includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
+The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-26 — Demo quiz seeder matches current V1 schema
+
+- `LeadGenerationQuizSeeder` now publishes a definition with `opening`, `result.mode=ai`, scored choice/yes-no fields, checkbox multi-select, and an `exclude_from_ai` question. Unpublished drafts are refreshed on re-seed; existing active revisions stay immutable. `DatabaseSeeder` creates an `admin@example.test` admin role user before the demo quiz.
+
+### 2026-08-26 — Complete setup guide and Curator media prerequisites
+
+- Added `docs/SETUP.md` covering clone through `composer`/`npm`, `.env`, `key:generate`, migrate, `storage:link`, `curator:token`, role seeding, admin bootstrap, AI provider env + Operational settings chains, and production checklist.
+- README quick start now requires Curator token and storage link; points to the full setup guide. Admin settings docs document AI credential/URL/model configuration.
+
+### 2026-08-26 — Server-to-server user provisioning API
+
+- Added `POST /api/v1/users` for programmatic administrator user creation with allowlisted Shield roles, sharing the existing fail-closed Bearer token and throttle with quiz generation. Documented in `docs/USER_PROVISIONING_API.md`.
+
+### 2026-08-26 — AI context exclusion and prompt variables
+
+- Questions may set `exclude_from_ai` so they and their answers are omitted from analysis context (default: include all).
+- Global Analysis result system prompt supports `{{questions_and_answers}}` only.
+- Optional per-quiz `result.system_prompt` (AI mode) overrides the global template and may also use `{{question.ID}}` / `{{answer.ID}}`.
+
+### 2026-08-26 — Generate AI draft header always visible
+
+- Generate AI draft is shown on quiz create and edit whether or not AI credentials exist. Confirm stays disabled without usable provider keys; the brief form remains available so administrators can see the action.
+
+### 2026-08-26 — Admin cannot create submissions
+
+- Hidden the Filament Submission create action and removed the unused create page. Submissions remain created only through the public quiz flow.
+
+### 2026-08-26 — Contact form shows only enabled lead-capture fields
+
+- Public contact capture always requires email. Name, company, and phone render only when the matching quiz setting is enabled. Server-side finalization ignores those fields when the setting is off, even if they are posted.
+
+### 2026-08-26 — Generate AI draft modal when credentials are missing
+
+- If the quiz AI provider chain has no usable environment credentials, Generate AI draft shows an explanation in the modal and disables Confirm instead of throwing `GenerationException` at the administrator.
+- Programmatic quiz/report generation still raises `ai_unavailable` when no credentials are configured.
+
+### 2026-08-26 — Operational settings expose named AI system prompts
+
+- Operational settings labels the persisted `prompts.quiz_template` and `prompts.report_template` fields as **Quiz creation system prompt** and **Analysis result system prompt**, with version labels and helper text describing quiz-draft vs analysis snapshotting.
+
+### 2026-08-26 — Quiz editor tabs, result modes, and thank-you overrides
+
+- Quiz create/edit uses Settings / Quiz / Result / Thank you tabs.
+- `result.mode` chooses AI analysis vs predetermined score bands; score mode requires a score-result builder and skips automatic AI analysis.
+- Thank-you is always on for AI results; score mode may disable it. Optional per-quiz thank-you HTML overrides the global Branding thank-you when enabled.
+
+### 2026-08-26 — Checkbox multi-answer questions clarified in the builder
+
+- The existing `multiple_choice` question type is labeled **Checkbox (multiple answers)** in the quiz builder. It already renders a public checkbox group that accepts multiple selected options and stores an answer list.
+
+### 2026-08-26 — Required public fields show an asterisk
+
+- Required questionnaire question labels, the contact email label, and the unlock password label display a visible `*` marker.
+
+### 2026-08-26 — Quiz builder blocks are collapsible
+
+- Filament quiz builder items (`question`, `content`, `page_break`) are collapsible so administrators can collapse blocks while reordering drafts.
+
+### 2026-08-26 — Questions may include an optional image or icon
+
+- Question blocks accept optional `image_url` (http/https) and optional plain-text `icon` (emoji or short label). Both are revision-frozen, validated at publish, and rendered on the public questionnaire.
+
+### 2026-08-26 — Optional answer scoring and predetermined score results
+
+- Choice options may include an optional integer `score`; yes/no questions may include optional `yes_score`/`no_score`.
+- Definitions may include optional non-overlapping `score_results` bands (`id`, `title`, `min_score`, `max_score`, optional `html`).
+- Questionnaire completion sums visible scored answers, matches a band when configured, and stores a scoring snapshot on submission metadata for contact/admin use.
+
+### 2026-08-26 — Optional quiz opening page with start button or inline questions
+
+- Version-1 definitions may include an optional revision-frozen `opening` object (`html`, `start_button_label`, `hide_start_button`) edited on the quiz form.
+- Opening HTML uses the same static allowlist sanitizer as thank-you HTML. With the start button visible, the opening gates the questionnaire until dismissed; with the button hidden, opening HTML appears above the first questionnaire page.
+
+### 2026-08-26 — Branding and report email settings use a full-width single column
+
+- Branding & design and Report email templates now use Filament `Width::Full` and a one-column form so identity, theme, thank-you HTML, sender, and template fields stack at the available panel width instead of the default two-column 7xl layout.
+
+### 2026-08-26 — Quiz create and edit use a full-width single column
+
+- Create Quiz and Edit Quiz now use Filament `Width::Full` and a one-column form so name, slug, access settings, and the block builder stack at the available panel width instead of the default two-column 7xl layout.
+
+### 2026-08-26 — Operational settings use Filament fields
+
+- Replaced the Operational settings JSON textareas with a Filament form: ordered quiz/report provider-chain repeaters, prompt version/template fields, Turnstile toggle and analysis-mode select, and numeric resume/retention/retry/timeout inputs.
+- Save goes through the existing `ApplicationSettings` closed validation boundary. Provider credentials remain environment-only. Branding/CSS and report email templates stay on their dedicated pages.
+
+### 2026-08-26 — Super admin is a strict superset of admin
+
+- Filament Shield `super_admin` is now an unrestricted administrator role: a strict superset of `admin`. It can access every administrator-only surface that `admin` can, including Branding & design.
+- Idempotent role seeding now creates `super_admin` with every permission assigned to `admin`.
+- Administrator-only authorization uses an `isAdministrator()` check that accepts `super_admin` or `admin`, so `hasRole('admin')` can no longer hide settings from a super admin.
 
 ### 2026-08-25 — Cycle-11 audit-safe quiz AI snapshots and lifecycle-compatible immutability
 
@@ -605,7 +746,7 @@ The administrator-only Branding & design settings page includes a database-backe
 - Added the versioned, rate-limited, server-to-server quiz-generation API with fail-closed environment Bearer-token authentication, allowlisted request validation, immutable generation auditing, optional publication, normalized provider errors, regression tests, and comprehensive operational reference documentation.
 - Added Spatie Laravel Settings and Filament settings pages for public-quiz branding/design (logo, colors, CSS, trusted JavaScript) and report email templates; settings are database-backed, migrated, rendered at runtime, and documented as non-secret administrator controls.
 - Added a true-administrator-only static thank-you-page HTML setting. Its output is sanitized through a strict server-side allowlist and cannot execute Blade, PHP, JavaScript, forms, embedded content, inline event/style attributes, or unsafe URLs.
-- Added Filament Shield/Spatie Permission, Shield-generated policies, a User resource with role assignment, and idempotent `admin`, `quiz_manager`, and `submission_manager` role seeding. Added Filament Excel filtered/selected quiz and submission exports with administrator-selected CSV/XLSX output.
+- Added Filament Shield/Spatie Permission, Shield-generated policies, a User resource with role assignment, and idempotent `super_admin`, `admin`, `quiz_manager`, and `submission_manager` role seeding. `super_admin` is a strict superset of `admin`. Added Filament Excel filtered/selected quiz and submission exports with administrator-selected CSV/XLSX output.
 
 ### 2026-08-25 — Cycle-10 runtime settings and operational workflows
 
