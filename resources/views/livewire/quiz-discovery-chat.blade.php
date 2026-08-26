@@ -64,8 +64,7 @@
                 this.scrollToLatest()
 
                 try {
-                    await $wire.$set('{{ $sessionId === null ? 'opening' : 'reply' }}', message)
-                    await $wire.{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}()
+                    await $wire.{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}(message)
                 } catch (error) {
                     this.draft = message
                 } finally {

@@ -45,15 +45,23 @@ class QuizDiscoveryChat extends Component
         $this->reset('sessionId', 'opening', 'reply', 'brief', 'showBrief');
     }
 
-    public function startDiscovery(): void
+    public function startDiscovery(?string $message = null): void
     {
+        if ($message !== null) {
+            $this->opening = $message;
+        }
+
         $this->validate(['opening' => ['required', 'string', 'max:4000']]);
         $this->loadSession(app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening));
         $this->reset('opening');
     }
 
-    public function sendReply(): void
+    public function sendReply(?string $message = null): void
     {
+        if ($message !== null) {
+            $this->reply = $message;
+        }
+
         $this->validate(['reply' => ['required', 'string', 'max:4000']]);
         $session = $this->session();
         if ($session === null) {
