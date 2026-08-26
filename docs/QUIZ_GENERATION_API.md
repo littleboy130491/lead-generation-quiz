@@ -115,7 +115,7 @@ The real `definition.blocks` contains the validated generated linear definition.
 | 422 | Laravel validation payload | Invalid/missing request field, duplicate slug, or invalid field size. Correct input before retrying. |
 | 429 | Laravel throttle response | Rate limited. Respect `Retry-After` before retrying. |
 | 502 | `quiz_generation_failed` | An unexpected generation failure was recorded. `error.quiz_id` identifies the retained draft/audit trail for an administrator. |
-| 503 | provider-specific `GenerationException` code | No usable provider or a normalized provider failure. `error.quiz_id` identifies the retained draft/audit trail. Retry only with bounded backoff. |
+| 503 | provider-specific `GenerationException` code | Usable quiz AI credentials were present but every provider attempt failed (`ai_generation_failed` or related). Missing quiz AI credentials do **not** return 503: the API returns a validated structural scaffold from the brief instead. `error.quiz_id` identifies the retained draft/audit trail. Retry only with bounded backoff. |
 
 Failed generations are **not silently deleted**. The draft and append-only audit record are retained for authorized administrator inspection without exposing secrets.
 
@@ -130,7 +130,7 @@ Failed generations are **not silently deleted**. The draft and append-only audit
 
 ## Operations checklist
 
-- Configure at least one supported AI provider credential in the server environment before using generation.
+- Optional: configure at least one supported AI provider credential and a Quiz AI provider chain for higher-quality drafts. Without credentials the API still returns a validated structural scaffold from the brief.
 - Set `QUIZ_GENERATION_API_TOKEN` on the production host, then run `php artisan optimize:clear`.
 - Store the token only in a server-side secret manager or CI secret store.
 - Monitor `quiz_draft_generations` and Laravel logs for failed attempts.

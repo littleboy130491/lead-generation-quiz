@@ -30,14 +30,9 @@ trait HasGenerateQuizDraftAction
             ])
             ->modalDescription(fn (): ?string => $this->quizAiIsConfigured()
                 ? null
-                : ConfiguredAiProviders::UNAVAILABLE_ADMIN_GUIDANCE)
-            ->modalSubmitAction(function (Action $action): Action {
-                return $action->disabled(! $this->quizAiIsConfigured());
-            })
+                : ConfiguredAiProviders::SCAFFOLD_ADMIN_GUIDANCE)
             ->action(function (array $data): void {
-                if (! $this->quizAiIsConfigured()) {
-                    return;
-                }
+                $usedAi = $this->quizAiIsConfigured();
 
                 try {
                     $quiz = $this->quizForAiDraftGeneration($data);
@@ -51,7 +46,9 @@ trait HasGenerateQuizDraftAction
                 }
 
                 if (! app()->runningUnitTests()) {
-                    Notification::make()->success()->title('AI draft generated.')->send();
+                    Notification::make()->success()->title(
+                        $usedAi ? 'AI draft generated.' : 'Structural draft generated.'
+                    )->send();
                 }
 
                 $this->afterAiDraftGenerated($quiz);

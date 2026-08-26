@@ -51,6 +51,27 @@ class QuizGenerationApiTest extends TestCase
         $this->assertSame(1, Quiz::firstOrFail()->draftGenerations()->count());
     }
 
+    public function test_authorized_client_receives_structural_scaffold_when_ai_credentials_are_missing(): void
+    {
+        config()->set('quiz_api.token', 'test-api-token');
+        config(['ai.providers.openai.key' => null]);
+
+        $response = $this->withToken('test-api-token')
+            ->postJson('/api/v1/quizzes/generate', $this->payload([
+                'slug' => 'scaffold-quiz',
+                'publish' => false,
+            ]))
+            ->assertCreated()
+            ->assertJsonPath('data.slug', 'scaffold-quiz')
+            ->assertJsonPath('data.status', 'draft');
+
+        $blocks = $response->json('data.definition.blocks');
+        $this->assertIsArray($blocks);
+        $this->assertNotEmpty($blocks);
+        $this->assertSame(1, Quiz::query()->where('slug', 'scaffold-quiz')->count());
+        $this->assertSame('completed', Quiz::query()->where('slug', 'scaffold-quiz')->firstOrFail()->draftGenerations()->firstOrFail()->status);
+    }
+
     public function test_generation_endpoint_rejects_unsafe_or_incomplete_requests(): void
     {
         config()->set('quiz_api.token', 'test-api-token');

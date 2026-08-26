@@ -409,11 +409,11 @@ Concrete Laravel AI implementations translate application settings into SDK call
 
 The administrator supplies audience, objective, business context, desired insight, question count, and tone. At the moment of each request, the application snapshots the persisted `ai.quiz` chain and the complete quiz system prompt derived from `prompts.quiz_version` and `prompts.quiz_template`, creates its append-only audit record, then invokes only those snapshots. Settings changes after request cannot alter that invocation. AI returns a structured proposed definition. The application validates schema, identifiers, options, page breaks, and conditions. The proposal remains a draft until an administrator reviews, previews, and publishes it; audit data is not embedded in the definition.
 
-When no `ai.quiz` chain entry has a matching environment provider key, the Generate AI draft header action remains visible on quiz create and edit. Opening it shows the brief form with an explanation that credentials are unavailable and disables Confirm. It does not hide the action or throw a generation exception into the administrator UI. Programmatic generation (API, jobs) still raises `GenerationException` with `ai_unavailable`.
+When no `ai.quiz` chain entry has a matching environment provider key, quiz-definition generation does **not** fail closed. The same `QuizDefinitionGenerator` path falls back to an application-owned structural scaffold built from the sanitized brief (stable IDs, supported question types, opening copy, `result.mode=ai`). Brief fields remain untrusted plain text and are never treated as instructions. The Generate AI draft header action remains available on quiz create and edit; when credentials are missing it explains that a structural scaffold will be used and still allows Confirm. Programmatic generation (`POST /api/v1/quizzes/generate` and `GenerateQuizDraft`) likewise returns a validated scaffold instead of `ai_unavailable`. Missing quiz AI credentials therefore must not block draft creation for administrators or server-to-server agents. Report/analysis generation is unchanged: it still raises `GenerationException` with `ai_unavailable` when the report chain has no usable credentials. When a quiz chain has usable credentials but every provider attempt fails, quiz generation raises `ai_generation_failed` (not the credential-missing path).
 
 ### 12.1a Server-to-server quiz-generation API
 
-`POST /api/v1/quizzes/generate` is a narrow server-to-server interface over the same draft-generation and optional publication actions. It accepts only allowlisted quiz metadata plus the documented structured brief; it does not accept arbitrary prompts, raw definitions, credentials, or frontend code. Authentication is a single environment-only `QUIZ_GENERATION_API_TOKEN` Bearer secret, compared in constant time and required even when the value is absent (fail closed). The route is rate-limited to 20 requests/minute. `publish: false` returns an editable draft; `publish: true` creates a new immutable active revision. Failed provider attempts retain their draft and append-only audit row for authorized inspection, return only normalized non-secret errors, and are never silently deleted. The comprehensive request/response, error, authentication, rotation, and operational contract is normative in `docs/QUIZ_GENERATION_API.md`.
+`POST /api/v1/quizzes/generate` is a narrow server-to-server interface over the same draft-generation and optional publication actions. It accepts only allowlisted quiz metadata plus the documented structured brief; it does not accept arbitrary prompts, raw definitions, credentials, or frontend code. Authentication is a single environment-only `QUIZ_GENERATION_API_TOKEN` Bearer secret, compared in constant time and required even when the value is absent (fail closed). The route is rate-limited to 20 requests/minute. `publish: false` returns an editable draft; `publish: true` creates a new immutable active revision. When no usable quiz AI credentials exist, the endpoint still succeeds with a validated structural scaffold from the brief. Failed provider attempts (credentials present but every attempt failed) retain their draft and append-only audit row for authorized inspection, return only normalized non-secret errors, and are never silently deleted. The comprehensive request/response, error, authentication, rotation, and operational contract is normative in `docs/QUIZ_GENERATION_API.md`.
 
 ### 12.1b Server-to-server user provisioning API
 
@@ -642,6 +642,10 @@ The administrator-only Branding & design settings page is available to `super_ad
 
 ## 23. Change Log
 
+### 2026-08-26 — Quiz draft scaffold when AI credentials are missing
+
+- Missing quiz AI provider credentials no longer block draft creation. `QuizDefinitionGenerator` falls back to a validated structural V1 scaffold from the sanitized brief for both the admin Generate AI draft action and `POST /api/v1/quizzes/generate`. Report/analysis generation still requires usable report-chain credentials. Provider failures after credentials are present still surface as `ai_generation_failed`.
+
 ### 2026-08-26 — Publish Livewire assets for Filament login
 
 - Documented and automated `php artisan livewire:publish --assets` so Filament/Livewire JS is served as static files under `public/vendor/livewire` instead of the default PHP asset route (which commonly 500s behind Nginx or subdirectory mounts). Composer post-autoload-dump/post-update republish the assets; setup docs and deploy checklists include the step.
@@ -679,8 +683,7 @@ The administrator-only Branding & design settings page is available to `super_ad
 
 ### 2026-08-26 — Generate AI draft modal when credentials are missing
 
-- If the quiz AI provider chain has no usable environment credentials, Generate AI draft shows an explanation in the modal and disables Confirm instead of throwing `GenerationException` at the administrator.
-- Programmatic quiz/report generation still raises `ai_unavailable` when no credentials are configured.
+- Superseded by the 2026-08-26 scaffold fallback: missing quiz credentials no longer disable Confirm or fail programmatic quiz draft generation. Report generation still raises `ai_unavailable` without report-chain credentials.
 
 ### 2026-08-26 — Operational settings expose named AI system prompts
 

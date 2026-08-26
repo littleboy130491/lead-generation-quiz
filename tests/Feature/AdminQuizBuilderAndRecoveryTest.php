@@ -73,7 +73,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
             ->assertDontSee('fi-width-7xl', false);
     }
 
-    public function test_generate_ai_draft_modal_disables_confirm_when_provider_credentials_are_missing(): void
+    public function test_generate_ai_draft_modal_allows_scaffold_when_provider_credentials_are_missing(): void
     {
         config(['ai.providers.openai.key' => null]);
         app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
@@ -86,10 +86,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $action = $page->instance()->getMountedAction();
         $this->assertNotNull($action);
-        $this->assertStringContainsString('No configured AI provider credentials are available.', (string) $action->getModalDescription());
-        $submit = $action->getModalSubmitAction();
-        $this->assertNotNull($submit);
-        $this->assertTrue($submit->isDisabled());
+        $this->assertStringContainsString('structural draft', (string) $action->getModalDescription());
         $this->assertFalse($action->isDisabled());
     }
 
@@ -105,14 +102,11 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $action = $page->instance()->getMountedAction();
         $this->assertNotNull($action);
-        $this->assertStringContainsString('No configured AI provider credentials are available.', (string) $action->getModalDescription());
-        $submit = $action->getModalSubmitAction();
-        $this->assertNotNull($submit);
-        $this->assertTrue($submit->isDisabled());
+        $this->assertStringContainsString('structural draft', (string) $action->getModalDescription());
         $this->assertFalse($action->isDisabled());
     }
 
-    public function test_generate_ai_draft_modal_enables_confirm_when_provider_credentials_are_configured(): void
+    public function test_generate_ai_draft_modal_omits_scaffold_notice_when_provider_credentials_are_configured(): void
     {
         config(['ai.providers.openai.key' => 'sk-test']);
         app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
@@ -124,10 +118,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $action = $page->instance()->getMountedAction();
         $this->assertNotNull($action);
-        $this->assertStringNotContainsString('No configured AI provider credentials are available.', (string) $action->getModalDescription());
-        $submit = $action->getModalSubmitAction();
-        $this->assertNotNull($submit);
-        $this->assertFalse($submit->isDisabled());
+        $this->assertStringNotContainsString('structural draft', (string) $action->getModalDescription());
     }
 
     public function test_authenticated_administrator_can_open_preview_and_revision_history_surfaces(): void

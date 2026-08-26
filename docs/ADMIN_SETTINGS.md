@@ -69,7 +69,7 @@ OPENAI_COMPATIBLE_API_KEY=...
 OPENAI_COMPATIBLE_URL=https://your-gateway.example/v1
 ```
 
-The `provider` field in Operational settings must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`, `openai-compatible`). That provider’s environment key must be set or the chain entry is skipped.
+The `provider` field in Operational settings must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`, `openai-compatible`). That provider’s environment key must be set or the chain entry is skipped. If the quiz chain has no usable credentials, Generate AI draft and `POST /api/v1/quizzes/generate` still produce a validated structural scaffold from the brief; only report/analysis generation requires usable report-chain credentials.
 
 ### Models
 

@@ -6,7 +6,7 @@ class ConfiguredAiProviders
 {
     public const UNAVAILABLE_MESSAGE = 'No configured AI provider credentials are available.';
 
-    public const UNAVAILABLE_ADMIN_GUIDANCE = 'No configured AI provider credentials are available. Add a quiz AI provider chain in Operational settings and set the matching environment keys.';
+    public const SCAFFOLD_ADMIN_GUIDANCE = 'No quiz AI provider credentials are configured. Confirm will create a structural draft from this brief that you can edit. Add a Quiz AI provider chain in Operational settings and matching environment keys for model-written drafts.';
 
     /**
      * @param  list<array{provider?: mixed, model?: mixed}>  $chain

@@ -241,7 +241,7 @@ Then: set `APP_DEBUG=false`, configure HTTPS/`APP_URL`, durable database/queue, 
 | Filament login Livewire JS **500** / script fails to load | Run `php artisan livewire:publish --assets` (and `php artisan filament:assets`). Confirm `public/vendor/livewire/manifest.json` is web-reachable. Default Livewire serves JS via a PHP route that often breaks under Nginx/subdirectory mounts. |
 | Media upload / Glide error about missing token | Run `php artisan curator:token` then `php artisan optimize:clear`. Confirm `CURATOR_GLIDE_TOKEN` in `.env`. |
 | Uploaded files 404 | Run `php artisan storage:link`. Confirm `CURATOR_DEFAULT_DISK=public`. |
-| Generate AI draft Confirm disabled | Set a provider key in `.env` and add a matching provider/model row under Operational settings. |
+| Generate AI draft uses a basic scaffold | Optional: set a provider key in `.env` and add a matching Quiz AI provider/model row under Operational settings for model-written drafts. |
 | `/api/v1/*` returns `401 unauthenticated` | Set `QUIZ_GENERATION_API_TOKEN` and send `Authorization: Bearer …`. |
 | Cannot access Branding & design | Sign in as `admin` or `super_admin` after `AdminRoleSeeder`. |
 | Stale config after editing `.env` | `php artisan optimize:clear` |
