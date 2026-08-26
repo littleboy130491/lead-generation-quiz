@@ -1,0 +1,1 @@
+<livewire:quiz-discovery-chat />

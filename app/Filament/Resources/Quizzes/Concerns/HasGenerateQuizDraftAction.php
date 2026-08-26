@@ -6,13 +6,13 @@ use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Ai\ConfiguredAiProviders;
 use App\Ai\GenerationException;
 use App\Enums\QuizStatus;
-use App\Filament\Pages\QuizDiscovery;
 use App\Models\Quiz;
 use App\Settings\ApplicationSettings;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\Width;
 use Illuminate\Support\Str;
 
 trait HasGenerateQuizDraftAction
@@ -72,7 +72,12 @@ trait HasGenerateQuizDraftAction
         return Action::make('quizDiscovery')
             ->label('AI quiz interview')
             ->icon('heroicon-o-chat-bubble-left-right')
-            ->url(QuizDiscovery::getUrl());
+            ->modalHeading('AI quiz interview')
+            ->modalDescription('Clarify the goal in a chat, review the brief, then generate an editable quiz draft.')
+            ->modalWidth(Width::Screen)
+            ->modalContent(fn () => view('filament.actions.quiz-discovery-modal'))
+            ->modalSubmitAction(false)
+            ->modalCancelAction(false);
     }
 
     /**
