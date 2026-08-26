@@ -1,16 +1,11 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $pageTitle ?? 'Thank you' }}</title>
-    <link rel="stylesheet" href="{{ asset('css/quiz.css') }}">
-</head>
-<body class="quiz-page">
-<main class="quiz-shell">
+@extends('quiz.layout')
+
+@section('title', $pageTitle ?? 'Thank you')
+
+@section('content')
+    @include('quiz.partials.brand')
+
     <section class="quiz-card quiz-complete">
         {!! $completionHtml !!}
     </section>
-</main>
-</body>
-</html>
+@endsection

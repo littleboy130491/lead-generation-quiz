@@ -12,6 +12,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 
 class SubmissionResource extends Resource
 {
@@ -47,5 +49,14 @@ class SubmissionResource extends Resource
             'index' => ListSubmissions::route('/'),
             'edit' => EditSubmission::route('/{record}/edit'),
         ];
+    }
+
+    public static function getRecordTitle(?Model $record): string|Htmlable|null
+    {
+        if (! $record instanceof Submission) {
+            return 'Submission';
+        }
+
+        return (string) ($record->quiz?->name ?? $record->public_id);
     }
 }

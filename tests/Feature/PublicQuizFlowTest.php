@@ -25,6 +25,9 @@ class PublicQuizFlowTest extends TestCase
 
         $response->assertOk()
             ->assertSee('rel="stylesheet"', false)
+            ->assertSee('quiz-atmosphere', false)
+            ->assertSee('quiz-brand', false)
+            ->assertSee('--quiz-primary', false)
             ->assertSee('First question')
             ->assertSee('quiz-required', false)
             ->assertSee('Second question')
@@ -143,6 +146,8 @@ class PublicQuizFlowTest extends TestCase
         $this->get(route('quizzes.contact', [$quiz, $submission]))
             ->assertOk()
             ->assertSee('rel="stylesheet"', false)
+            ->assertSee('quiz-atmosphere', false)
+            ->assertSee('--quiz-primary', false)
             ->assertSee('Where should we send your report?')
             ->assertSee('for="email"', false)
             ->assertDontSee('for="name"', false)

@@ -14,10 +14,13 @@ use App\Filament\Resources\Submissions\SubmissionResource;
 use App\Models\Submission;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Enums\Width;
 
 class EditSubmission extends EditRecord
 {
     protected static string $resource = SubmissionResource::class;
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     protected function getHeaderActions(): array
     {

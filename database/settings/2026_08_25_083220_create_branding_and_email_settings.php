@@ -9,10 +9,10 @@ return new class extends SettingsMigration
         $this->migrator->add('branding.site_name', 'Lead Generation Quiz');
         $this->migrator->add('branding.eyebrow', 'Business assessment');
         $this->migrator->add('branding.logo_url', null);
-        $this->migrator->add('branding.primary_color', '#b45309');
-        $this->migrator->add('branding.secondary_color', '#fff7ed');
-        $this->migrator->add('branding.background_color', '#fffaf5');
-        $this->migrator->add('branding.text_color', '#1c1917');
+        $this->migrator->add('branding.primary_color', '#0f766e');
+        $this->migrator->add('branding.secondary_color', '#ccfbf1');
+        $this->migrator->add('branding.background_color', '#f0fdfa');
+        $this->migrator->add('branding.text_color', '#042f2e');
         $this->migrator->add('branding.border_radius', '1rem');
         $this->migrator->add('branding.additional_css', '');
         $this->migrator->add('branding.additional_js', '');

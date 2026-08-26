@@ -19,6 +19,8 @@ The settings apply to public quiz pages at runtime without a deploy:
 - additional JavaScript (maximum 20,000 characters); and
 - a static **Thank-you page HTML** field (maximum 40,000 characters).
 
+Public questionnaire, unlock, contact, and completion pages share one respondent shell: atmospheric background, brand header, progress treatment, and interactive option tiles driven by these tokens.
+
 CSS rejects HTML, `@import`, external `url()`, `javascript:`, and legacy CSS expression syntax. JavaScript is a **trusted administrator** capability and is placed only on public quiz pages. Never use it for secrets, credentials, analytics keys, payment logic, or untrusted respondent data. Do not include `<script>` or `<style>` tags; enter the JavaScript body only.
 
 ### Thank-you page HTML

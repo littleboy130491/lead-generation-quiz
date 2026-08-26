@@ -1,23 +1,22 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $quiz->name }}</title>
-    <link rel="stylesheet" href="{{ asset('css/quiz.css') }}">
-    <style>:root{--quiz-primary:{{ $branding->primary_color }};--quiz-secondary:{{ $branding->secondary_color }};--quiz-background:{{ $branding->background_color }};--quiz-text:{{ $branding->text_color }};--quiz-radius:{{ $branding->border_radius }};} {!! $branding->additional_css !!}</style>
-</head>
-<body class="quiz-page">
-<main class="quiz-shell">
+@extends('quiz.layout')
+
+@section('title', $quiz->name)
+
+@section('content')
+    @include('quiz.partials.brand')
+
     <header class="quiz-header">
-        @if ($branding->logo_url)<img src="{{ $branding->logo_url }}" alt="{{ $branding->site_name }}" class="quiz-logo">@endif
-        <p class="quiz-eyebrow">{{ $branding->eyebrow }}</p>
+        <p class="quiz-eyebrow">{{ $openingPending ? 'Get ready' : 'Your assessment' }}</p>
         <h1>{{ $quiz->name }}</h1>
         @if ($openingPending)
             <p class="quiz-progress" aria-live="polite">Introduction</p>
         @else
-            <p class="quiz-progress" aria-live="polite">Page {{ $submission->current_page + 1 }} of {{ count($pages) }}</p>
-            <div class="quiz-progress-track" aria-hidden="true"><span style="width: {{ (int) (($submission->current_page + 1) / max(count($pages), 1) * 100) }}%"></span></div>
+            @php($progressPercent = (int) (($submission->current_page + 1) / max(count($pages), 1) * 100))
+            <div class="quiz-progress-meta">
+                <p class="quiz-progress" aria-live="polite">Page {{ $submission->current_page + 1 }} of {{ count($pages) }}</p>
+                <p class="quiz-progress-percent">{{ $progressPercent }}%</p>
+            </div>
+            <div class="quiz-progress-track" aria-hidden="true"><span style="width: {{ $progressPercent }}%"></span></div>
         @endif
     </header>
 
@@ -102,7 +101,4 @@
             </div>
         </form>
     @endif
-</main>
-@if ($branding->additional_js)<script>{!! str_replace('</script>', '', $branding->additional_js) !!}</script>@endif
-</body>
-</html>
+@endsection

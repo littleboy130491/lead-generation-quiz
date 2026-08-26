@@ -7,10 +7,11 @@ use App\Enums\SubmissionStatus;
 use App\Models\Quiz;
 use App\Models\Submission;
 use App\Services\CompletionHtmlSanitizer;
+use App\Settings\BrandingSettings;
 
 class QuizProgressController extends Controller
 {
-    public function contact(Quiz $quiz, Submission $submission, CompletionHtmlSanitizer $html)
+    public function contact(Quiz $quiz, Submission $submission, CompletionHtmlSanitizer $html, BrandingSettings $branding)
     {
         abort_unless($submission->quiz_id === $quiz->id && $submission->status === SubmissionStatus::AwaitingContact, 403);
 
@@ -22,6 +23,6 @@ class QuizProgressController extends Controller
             ? $html->sanitize((string) $scoreResult['html'])
             : '';
 
-        return view('quiz.contact', compact('quiz', 'submission', 'scoreResult', 'scoreResultHtml'));
+        return view('quiz.contact', compact('quiz', 'submission', 'scoreResult', 'scoreResultHtml', 'branding'));
     }
 }

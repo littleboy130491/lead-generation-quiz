@@ -25,7 +25,7 @@ class QuizController extends Controller
     {
         abort_unless($quiz->status->value === 'published' && $quiz->activeRevision, 404);
         if ($quiz->password_hash && ! $this->isUnlocked($request, $quiz)) {
-            return view('quiz.unlock', compact('quiz'));
+            return view('quiz.unlock', compact('quiz', 'branding'));
         }
 
         $existing = Submission::query()

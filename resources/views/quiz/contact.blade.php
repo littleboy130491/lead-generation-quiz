@@ -1,13 +1,10 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Your report</title>
-    <link rel="stylesheet" href="{{ asset('css/quiz.css') }}">
-</head>
-<body class="quiz-page">
-<main class="quiz-shell">
+@extends('quiz.layout')
+
+@section('title', 'Your report')
+
+@section('content')
+    @include('quiz.partials.brand')
+
     <header class="quiz-header">
         <p class="quiz-eyebrow">Almost there</p>
         <h1>Where should we send your report?</h1>
@@ -49,6 +46,4 @@
         @endif
         <div class="quiz-actions"><button class="quiz-button" type="submit">Send my report</button></div>
     </form>
-</main>
-</body>
-</html>
+@endsection

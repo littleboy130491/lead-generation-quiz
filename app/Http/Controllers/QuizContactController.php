@@ -56,6 +56,7 @@ class QuizContactController extends Controller
         return view('quiz.complete', [
             'quiz' => $quiz,
             'submission' => $submission,
+            'branding' => $branding,
             'pageTitle' => $title,
             'completionHtml' => $completionHtml->sanitize($html),
         ]);

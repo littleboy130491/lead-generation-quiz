@@ -13,14 +13,19 @@ class QuizPageCompiler
             if (($block['type'] ?? null) === 'page_break') {
                 if (empty(end($pages))) {
                     throw new InvalidArgumentException('Page breaks cannot be leading, trailing, or consecutive.');
-                } $pages[] = [];
+                }
+                $pages[] = [];
 
                 continue;
-            } $pages[array_key_last($pages)][] = $block;
-        } if (empty(end($pages))) {
+            }
+
+            $pages[array_key_last($pages)][] = $block;
+        }
+
+        if (empty(end($pages))) {
             throw new InvalidArgumentException('Page breaks cannot be leading, trailing, or consecutive.');
         }
 
-return $pages;
+        return $pages;
     }
 }
