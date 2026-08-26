@@ -55,11 +55,11 @@ class LaravelQuizDiscoveryInterviewer implements QuizDiscoveryInterviewer
         return [
             'message' => $schema->string()->required(),
             'brief' => $schema->object([
-                'business_context' => $schema->string(),
-                'target_audience' => $schema->string(),
-                'objective' => $schema->string(),
-                'desired_insight' => $schema->string(),
-                'tone' => $schema->string(),
+                'business_context' => $schema->string()->nullable(),
+                'target_audience' => $schema->string()->nullable(),
+                'objective' => $schema->string()->nullable(),
+                'desired_insight' => $schema->string()->nullable(),
+                'tone' => $schema->string()->nullable(),
             ])->required(),
         ];
     }
