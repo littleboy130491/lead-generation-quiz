@@ -489,7 +489,7 @@ Implement:
 - Design token editor and additional CSS on Branding & design (single full-width column: `Width::Full`, form `columns(1)`).
 - Administrator-only static thank-you HTML with a server-side structural allowlist; it must not evaluate Blade/PHP/JavaScript or interpolate respondent data.
 - Email templates and preview on Report email templates (same full-width single-column layout as Branding & design).
-- Prompt templates/version labels as Filament fields on Operational settings.
+- Prompt templates/version labels as Filament fields on Operational settings. The Analysis result system prompt defaults to an evidence-based, grounded business-advisor instruction while the fixed application safety/schema envelope remains non-removable.
 - Resume, retention, retry, timeout, and spam settings as Filament fields on Operational settings.
 
 Completion requirement: settings are not merely persisted. Keep `ApplicationSettings` as the closed validation boundary and feature-test each runtime consumer: `ai.quiz` and `ai.report` chains, prompt snapshots, controlled email renderer, public design CSS/tokens, Turnstile/analysis mode, resume/retention, recovery/lease timeout, and `notifications.submission_emails` queued admin notices on completed submissions. Reject secrets, unknown nested fields, executable template syntax, and unsafe CSS.

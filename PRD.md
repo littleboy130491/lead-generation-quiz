@@ -421,7 +421,7 @@ When no `ai.quiz` chain entry has a matching environment provider key, quiz-defi
 
 ### 12.2 Analysis AI
 
-The analysis agent receives one frozen quiz revision and one frozen answer snapshot, after omitting questions marked `exclude_from_ai` (and their answers) from AI context. By default every question is included. The composed analysis system prompt is the fixed report-schema safety instruction plus either the quiz `result.system_prompt` override (when nonblank in AI mode) or the global `prompts.report_template`. Templates may use `{{questions_and_answers}}` for included Q&A only. Quiz overrides may also use `{{question.<id>}}` and `{{answer.<id>}}` for IDs in the revision; excluded IDs resolve empty. Substituted values are wrapped as untrusted prompt data. Unknown placeholders are rejected at settings save or publish validation. Analysis `input_snapshot` stores the filtered revision/answers sent to the model; the submission still retains the full answer snapshot. It has no tools, browsing, cross-submission retrieval, or conversation memory. It returns structured report data such as:
+The analysis agent receives one frozen quiz revision and one frozen answer snapshot, after omitting questions marked `exclude_from_ai` (and their answers) from AI context. By default every question is included. Operational settings default `prompts.report_template` to an evidence-based business-advisor instruction that requires grounded, calibrated, practical guidance and complete report fields. The composed analysis system prompt is the fixed report-schema safety instruction plus either the quiz `result.system_prompt` override (when nonblank in AI mode) or this global template. Templates may use `{{questions_and_answers}}` for included Q&A only. Quiz overrides may also use `{{question.<id>}}` and `{{answer.<id>}}` for IDs in the revision; excluded IDs resolve empty. Substituted values are wrapped as untrusted prompt data. Unknown placeholders are rejected at settings save or publish validation. Analysis `input_snapshot` stores the filtered revision/answers sent to the model; the submission still retains the full answer snapshot. It has no tools, browsing, cross-submission retrieval, or conversation memory. It returns structured report data such as:
 
 - Executive summary
 - Profile
@@ -650,6 +650,10 @@ The administrator-only Branding & design settings page is available to `super_ad
 
 - Operational settings stores `notifications.submission_emails` as a validated list of one or more administrator addresses (empty disables notices).
 - When a submission newly becomes `completed`, the application queues one notification email per configured address with quiz name, lead email, and an admin link. Idempotent re-finalization does not re-notify.
+
+### 2026-08-26 — Default analysis-result prompt
+
+- Added and persisted the default **Analysis result system prompt**: an evidence-based business-advisor instruction that requires grounded, calibrated, practical reports with complete structured fields. It remains editable in Operational settings while the existing report-schema safety envelope stays application-owned.
 
 ### 2026-08-26 — Default quiz-generation prompt and immutable output contract
 

@@ -73,6 +73,16 @@ class AdminCompletionTest extends TestCase
         );
     }
 
+    public function test_application_settings_default_to_the_analysis_result_template(): void
+    {
+        $template = app(ApplicationSettings::class)->get('prompts')['report_template'];
+
+        $this->assertStringContainsString('evidence-based business advisor', $template);
+        $this->assertStringContainsString('executive_summary', $template);
+        $this->assertStringContainsString('action_plan', $template);
+        $this->assertStringContainsString('Do not invent facts', $template);
+    }
+
     public function test_application_settings_persist_non_secret_configuration_and_reject_secret_keys(): void
     {
         $settings = app(ApplicationSettings::class);

@@ -3,6 +3,7 @@
 namespace App\Settings;
 
 use App\Ai\Prompt\AnalysisPromptVariables;
+use App\Ai\Prompt\AnalysisResultPrompt;
 use App\Ai\Prompt\QuizDefinitionPrompt;
 use App\Models\ApplicationSetting;
 use InvalidArgumentException;
@@ -12,7 +13,7 @@ class ApplicationSettings
     private const DEFAULTS = [
         'ai.quiz' => [],
         'ai.report' => [],
-        'prompts' => ['quiz_version' => 'v1', 'quiz_template' => QuizDefinitionPrompt::DEFAULT_TEMPLATE, 'report_version' => 'v1', 'report_template' => ''],
+        'prompts' => ['quiz_version' => 'v1', 'quiz_template' => QuizDefinitionPrompt::DEFAULT_TEMPLATE, 'report_version' => 'v1', 'report_template' => AnalysisResultPrompt::DEFAULT_TEMPLATE],
         'report.email' => ['subject' => 'Your quiz report', 'html' => '<h1>{{report.executive_summary}}</h1>', 'text' => '{{report.executive_summary}}'],
         'design' => ['tokens' => [], 'additional_css' => ''],
         'spam' => ['turnstile_enabled' => false, 'analysis_mode' => 'always'],
