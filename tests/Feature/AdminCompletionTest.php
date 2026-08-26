@@ -79,6 +79,21 @@ class AdminCompletionTest extends TestCase
         $settings->put('ai.quiz.api_key', 'never-store-a-secret');
     }
 
+    public function test_application_settings_accept_openrouter_provider_model_identifiers(): void
+    {
+        $settings = app(ApplicationSettings::class);
+
+        $settings->put('ai.quiz', [[
+            'provider' => 'openrouter',
+            'model' => 'deepseek/deepseek-v4-flash-0731',
+        ]]);
+
+        $this->assertSame([[
+            'provider' => 'openrouter',
+            'model' => 'deepseek/deepseek-v4-flash-0731',
+        ]], $settings->get('ai.quiz'));
+    }
+
     public function test_admin_settings_page_is_authorized_and_exposes_persistent_configuration_form(): void
     {
         $this->actingAs(User::factory()->create())

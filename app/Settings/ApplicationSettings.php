@@ -80,7 +80,7 @@ class ApplicationSettings
                 }
                 $provider = (string) $entry['provider'];
                 $model = (string) $entry['model'];
-                if (! preg_match('/^[a-z0-9._-]{1,80}$/i', $provider) || ! preg_match('/^[a-z0-9._:-]{1,120}$/i', $model)) {
+                if (! preg_match('/^[a-z0-9._-]{1,80}$/i', $provider) || ! preg_match('#^[a-z0-9._:/-]{1,120}$#i', $model)) {
                     throw new InvalidArgumentException('Provider chains contain only safe provider and model pairs.');
                 }
                 if (array_key_exists('endpoint_url', $entry) && $entry['endpoint_url'] !== null && $entry['endpoint_url'] !== '') {

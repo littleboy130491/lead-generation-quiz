@@ -435,7 +435,7 @@ Application Blade templates produce report HTML/text from validated structured f
 
 ### 12.3 Provider failover
 
-Quiz generation and report generation have independent ordered provider/model chains. Runtime database settings select from providers already enabled in `config/ai.php` via a Filament select; credentials remain in environment variables. A **Custom (OpenAI-compatible)** option stores provider `openai-compatible` with a required non-secret `endpoint_url` on the chain entry; the matching API key remains environment-only (`OPENAI_COMPATIBLE_API_KEY`).
+Quiz generation and report generation have independent ordered provider/model chains. Runtime database settings select from providers already enabled in `config/ai.php` via a Filament select; credentials remain in environment variables. Model identifiers allow safe OpenRouter-style namespace/model syntax (including `/`), while retaining a bounded allowlist of identifier characters. A **Custom (OpenAI-compatible)** option stores provider `openai-compatible` with a required non-secret `endpoint_url` on the chain entry; the matching API key remains environment-only (`OPENAI_COMPATIBLE_API_KEY`).
 
 Each analysis records the requested chain, each normalized attempt, actual completing provider/model, and whether failover occurred. Failover is intended for eligible transient/provider conditions such as rate limits, overload, unavailability, or insufficient credits, not invalid application requests.
 
@@ -656,6 +656,10 @@ The administrator-only Branding & design settings page is available to `super_ad
 - Quiz edit header includes a Preview action that opens the public quiz URL in a new tab.
 - Authenticated panel users can live-preview draft quizzes at the public slug with a sticky draft banner; guests still get 404. Draft preview uses session state only and never creates submissions.
 - Quiz list Preview opens the same live URL.
+
+### 2026-08-26 — OpenRouter model identifier validation
+
+- Operational settings and the closed `ApplicationSettings` validation boundary accept safe slash-delimited provider/model identifiers required by OpenRouter (for example, `deepseek/deepseek-v4-flash-0731`), while preserving the 120-character bound and restricted identifier character allowlist.
 
 ### 2026-08-26 — Engaging public quiz respondent UI
 

@@ -202,7 +202,7 @@ class OperationalSettings extends Page
                     ->label('Model')
                     ->required()
                     ->maxLength(120)
-                    ->regex('/^[a-z0-9._:-]{1,120}$/i'),
+                    ->regex('#^[a-z0-9._:/-]{1,120}$#i'),
                 TextInput::make('endpoint_url')
                     ->label('Endpoint URL')
                     ->url()

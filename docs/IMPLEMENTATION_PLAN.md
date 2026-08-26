@@ -484,7 +484,7 @@ Provide quiz/revision-filtered counts and conversion rates for starts, questionn
 
 Implement:
 
-- Ordered provider/model chains separately for quiz and report generation as Filament repeaters on Operational settings, not JSON textareas.
+- Ordered provider/model chains separately for quiz and report generation as Filament repeaters on Operational settings, not JSON textareas. Model validation permits safe slash-delimited OpenRouter identifiers while retaining bounded allowlisted characters.
 - Cheap connection and structured-output tests with redacted failures.
 - Design token editor and additional CSS on Branding & design (single full-width column: `Width::Full`, form `columns(1)`).
 - Administrator-only static thank-you HTML with a server-side structural allowlist; it must not evaluate Blade/PHP/JavaScript or interpolate respondent data.
