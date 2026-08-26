@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Actions\Quizzes\DuplicateQuiz;
 use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Ai\Contracts\QuizDefinitionGenerator;
+use App\Ai\Prompt\QuizDefinitionPrompt;
 use App\Filament\Pages\ManageBrandingSettings;
 use App\Filament\Pages\ManageReportEmailSettings;
 use App\Filament\Pages\OperationalSettings;
@@ -62,6 +63,14 @@ class AdminCompletionTest extends TestCase
         $this->assertSame('goal', $quiz->fresh()->draft_definition['blocks'][0]['id']);
         $this->assertNull($quiz->fresh()->active_revision_id);
         $this->assertSame(0, $quiz->revisions()->count());
+    }
+
+    public function test_application_settings_default_to_the_quiz_generation_template(): void
+    {
+        $this->assertSame(
+            QuizDefinitionPrompt::DEFAULT_TEMPLATE,
+            app(ApplicationSettings::class)->get('prompts')['quiz_template'],
+        );
     }
 
     public function test_application_settings_persist_non_secret_configuration_and_reject_secret_keys(): void

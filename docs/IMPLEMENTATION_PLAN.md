@@ -371,7 +371,7 @@ Create `QuizDefinitionGenerator` and a Laravel AI implementation. Define a struc
 
 System instructions must specify:
 
-- Output schema.
+- Output schema, appended programmatically from the V1 validator contract after the configurable administrator template. The final prompt must require one JSON object only, never Markdown fences/prose.
 - Stable ID requirements.
 - Supported question and condition types.
 - No executable content.

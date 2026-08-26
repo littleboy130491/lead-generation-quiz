@@ -108,6 +108,7 @@ class CycleElevenIntegrityTest extends TestCase
         $this->assertSame([['provider' => 'original-provider', 'model' => 'original-model']], $audit->requested_provider_chain);
         $this->assertSame('quiz-v7', $audit->prompt_version);
         $this->assertStringContainsString('Original quiz instruction.', $audit->system_prompt_snapshot);
+        $this->assertStringContainsString('Return exactly one JSON object and nothing else.', $audit->system_prompt_snapshot);
         $this->assertSame('completed', $audit->status);
         $this->assertNotEmpty($audit->result_hash);
         $this->assertArrayNotHasKey('ai_request_snapshot', $quiz->fresh()->draft_definition);
