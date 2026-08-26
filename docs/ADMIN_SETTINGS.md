@@ -4,7 +4,7 @@ The Filament admin panel provides database-backed Spatie Settings pages:
 
 - **Branding & design** — `/admin/manage-branding-settings`
 - **Report email templates** — `/admin/manage-report-email-settings`
-- **Operational settings** — `/admin/operational-settings` (Filament form for quiz/report provider chains, AI system prompts for quiz creation and analysis results, Turnstile/analysis mode, and resume/retention/retry/timeout policy; not JSON)
+- **Operational settings** — `/admin/operational-settings` (Filament form for quiz/report provider chains, AI system prompts for quiz creation and analysis results, Turnstile/analysis mode, resume/retention/retry/timeout policy, and admin submission notification emails; not JSON)
 
 Branding & design and Report email templates use a single full-width column (`Width::Full`, form `columns(1)`).
 
@@ -38,6 +38,10 @@ Settings include sender name, optional reply-to address, subject, HTML template,
 
 Report values are escaped when rendered into HTML. Email templates should not contain PHP, Blade execution directives, JavaScript, or secrets.
 
+## Operational settings — Admin submission notifications
+
+Under **Operational settings → Admin submission notifications**, add one or more email addresses. When a respondent completes a submission (contact email accepted), each address receives a queued notification with the quiz name, lead email, and an admin link. Leave the list empty to disable notices. Addresses are validated, lowercased, and de-duplicated (maximum 20).
+
 ## Operational settings — AI system prompts
 
 Under **Operational settings**, administrators configure:
@@ -49,7 +53,7 @@ Provider credentials remain environment-only. Prompts are non-secret bounded tex
 
 ## Operational settings — AI provider chains
 
-Under **Operational settings**, ordered **Quiz AI provider chain** and **Report AI provider chain** repeaters select non-secret `provider` + `model` pairs. Credentials and optional base URLs are **not** entered here.
+Under **Operational settings**, ordered **Quiz AI provider chain** and **Report AI provider chain** repeaters use a **Provider** select (from `config/ai.php`) plus a **Model** field. Choose **Custom (OpenAI-compatible)** to reveal an **Endpoint URL** field for an OpenAI-compatible gateway. Credentials remain environment-only (`OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`, etc.).
 
 ### Environment (secrets and URLs)
 
@@ -71,7 +75,7 @@ OPENAI_COMPATIBLE_API_KEY=...
 OPENAI_COMPATIBLE_URL=https://your-gateway.example/v1
 ```
 
-The `provider` field in Operational settings must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`, `openai-compatible`). That provider’s environment key must be set or the chain entry is skipped. If the quiz chain has no usable credentials, Generate AI draft and `POST /api/v1/quizzes/generate` still produce a validated structural scaffold from the brief; only report/analysis generation requires usable report-chain credentials.
+The `provider` select must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`). **Custom (OpenAI-compatible)** stores provider `openai-compatible` with a required endpoint URL and uses `OPENAI_COMPATIBLE_API_KEY` from the environment. Entries without a usable key (or custom entries without a URL) are skipped. If the quiz chain has no usable credentials, Generate AI draft and `POST /api/v1/quizzes/generate` still produce a validated structural scaffold from the brief; only report/analysis generation requires usable report-chain credentials.
 
 ### Models
 

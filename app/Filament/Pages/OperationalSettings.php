@@ -7,6 +7,7 @@ use App\Settings\ApplicationSettings;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -16,11 +17,14 @@ use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
+use Laravel\Ai\Enums\Lab;
 
 /**
  * @property-read Schema $form
@@ -62,6 +66,7 @@ class OperationalSettings extends Page
             'prompts' => $all['prompts'],
             'spam' => $all['spam'],
             'operations' => $all['operations'],
+            'notifications' => $all['notifications'],
         ]);
     }
 
@@ -74,12 +79,12 @@ class OperationalSettings extends Page
     {
         return $schema->components([
             Section::make('Quiz AI provider chain')
-                ->description('Ordered failover for quiz-draft generation. Use environment-configured provider names only.')
+                ->description('Ordered failover for quiz-draft generation. Choose a configured provider, or Custom for an OpenAI-compatible endpoint URL. API keys remain environment-only.')
                 ->schema([
                     $this->providerChainRepeater('ai.quiz'),
                 ]),
             Section::make('Report AI provider chain')
-                ->description('Ordered failover for report generation. Use environment-configured provider names only.')
+                ->description('Ordered failover for report generation. Choose a configured provider, or Custom for an OpenAI-compatible endpoint URL. API keys remain environment-only.')
                 ->schema([
                     $this->providerChainRepeater('ai.report'),
                 ]),
@@ -110,6 +115,16 @@ class OperationalSettings extends Page
                 TextInput::make('operations.retry_attempts')->label('Retry attempts')->required()->numeric()->integer()->minValue(0)->maxValue(20),
                 TextInput::make('operations.timeout_seconds')->label('Timeout seconds')->required()->numeric()->integer()->minValue(5)->maxValue(3600),
             ])->columns(2),
+            Section::make('Admin submission notifications')
+                ->description('When a respondent completes a submission (contact email accepted), each address below receives a queued notification. Leave empty to disable.')
+                ->schema([
+                    TagsInput::make('notifications.submission_emails')
+                        ->label('Notification emails')
+                        ->placeholder('admin@example.com')
+                        ->nestedRecursiveRules(['email:rfc', 'max:254'])
+                        ->helperText('Add one or more administrator email addresses. Duplicates are removed automatically. Maximum 20.')
+                        ->columnSpanFull(),
+                ]),
         ]);
     }
 
@@ -155,6 +170,9 @@ class OperationalSettings extends Page
                     'retry_attempts' => (int) ($data['operations']['retry_attempts'] ?? 3),
                     'timeout_seconds' => (int) ($data['operations']['timeout_seconds'] ?? 60),
                 ]);
+                $settings->put('notifications', [
+                    'submission_emails' => array_values($data['notifications']['submission_emails'] ?? []),
+                ]);
             });
         } catch (InvalidArgumentException $exception) {
             throw ValidationException::withMessages(['data' => $exception->getMessage()]);
@@ -173,8 +191,26 @@ class OperationalSettings extends Page
         return Repeater::make($name)
             ->label('Provider order')
             ->schema([
-                TextInput::make('provider')->required()->maxLength(80)->regex('/^[a-z0-9._-]{1,80}$/i')->helperText('Environment provider name. Secrets are never stored here.'),
-                TextInput::make('model')->required()->maxLength(120)->regex('/^[a-z0-9._:-]{1,120}$/i'),
+                Select::make('provider')
+                    ->label('Provider')
+                    ->options($this->providerOptions())
+                    ->required()
+                    ->live()
+                    ->native(false)
+                    ->helperText('API keys stay in .env. Choose Custom to set an OpenAI-compatible endpoint URL.'),
+                TextInput::make('model')
+                    ->label('Model')
+                    ->required()
+                    ->maxLength(120)
+                    ->regex('/^[a-z0-9._:-]{1,120}$/i'),
+                TextInput::make('endpoint_url')
+                    ->label('Endpoint URL')
+                    ->url()
+                    ->maxLength(2048)
+                    ->visible(fn (Get $get): bool => $get('provider') === 'openai-compatible')
+                    ->required(fn (Get $get): bool => $get('provider') === 'openai-compatible')
+                    ->helperText('Base URL for the OpenAI-compatible API (for example https://your-gateway.example/v1). Uses OPENAI_COMPATIBLE_API_KEY from the environment.')
+                    ->columnSpanFull(),
             ])
             ->columns(2)
             ->reorderable()
@@ -185,14 +221,55 @@ class OperationalSettings extends Page
     }
 
     /**
+     * @return array<string, string>
+     */
+    private function providerOptions(): array
+    {
+        $labels = [
+            'anthropic' => 'Anthropic',
+            'azure' => 'Azure OpenAI',
+            'bedrock' => 'Amazon Bedrock',
+            'deepseek' => 'DeepSeek',
+            'gemini' => 'Google Gemini',
+            'groq' => 'Groq',
+            'mistral' => 'Mistral',
+            'ollama' => 'Ollama',
+            'openai' => 'OpenAI',
+            'openai-compatible' => 'Custom (OpenAI-compatible)',
+            'openrouter' => 'OpenRouter',
+            'xai' => 'xAI',
+        ];
+
+        $options = [];
+        foreach (array_keys(config('ai.providers', [])) as $key) {
+            if (Lab::tryFrom($key) === null) {
+                continue;
+            }
+            $options[$key] = $labels[$key] ?? Str::headline(str_replace('-', ' ', $key));
+        }
+
+        return $options;
+    }
+
+    /**
      * @param  array<mixed>  $value
-     * @return list<array{provider: string, model: string}>
+     * @return list<array{provider: string, model: string, endpoint_url?: string}>
      */
     private function normalizedChain(array $value): array
     {
-        return array_values(array_map(fn (mixed $entry): array => [
-            'provider' => is_array($entry) ? (string) ($entry['provider'] ?? '') : '',
-            'model' => is_array($entry) ? (string) ($entry['model'] ?? '') : '',
-        ], $value));
+        return array_values(array_map(function (mixed $entry): array {
+            $provider = is_array($entry) ? (string) ($entry['provider'] ?? '') : '';
+            $model = is_array($entry) ? (string) ($entry['model'] ?? '') : '';
+            $normalized = [
+                'provider' => $provider,
+                'model' => $model,
+            ];
+            $endpoint = is_array($entry) ? trim((string) ($entry['endpoint_url'] ?? '')) : '';
+            if ($provider === 'openai-compatible' && $endpoint !== '') {
+                $normalized['endpoint_url'] = $endpoint;
+            }
+
+            return $normalized;
+        }, $value));
     }
 }

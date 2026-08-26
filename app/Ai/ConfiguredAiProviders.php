@@ -9,7 +9,7 @@ class ConfiguredAiProviders
     public const SCAFFOLD_ADMIN_GUIDANCE = 'No quiz AI provider credentials are configured. Confirm will create a structural draft from this brief that you can edit. Add a Quiz AI provider chain in Operational settings and matching environment keys for model-written drafts.';
 
     /**
-     * @param  list<array{provider?: mixed, model?: mixed}>  $chain
+     * @param  list<array{provider?: mixed, model?: mixed, endpoint_url?: mixed}>  $chain
      */
     public function hasUsableCredentials(array $chain): bool
     {
@@ -17,8 +17,8 @@ class ConfiguredAiProviders
     }
 
     /**
-     * @param  list<array{provider?: mixed, model?: mixed}>  $chain
-     * @return list<array{provider: string, model: string}>
+     * @param  list<array{provider?: mixed, model?: mixed, endpoint_url?: mixed}>  $chain
+     * @return list<array{provider: string, model: string, endpoint_url?: string}>
      */
     public function usable(array $chain): array
     {
@@ -29,9 +29,30 @@ class ConfiguredAiProviders
             if (! is_string($provider) || ! is_string($model) || ! config("ai.providers.{$provider}.key")) {
                 continue;
             }
-            $usable[] = ['provider' => $provider, 'model' => $model];
+            if ($provider === 'openai-compatible') {
+                $url = $entry['endpoint_url'] ?? config('ai.providers.openai-compatible.url');
+                if (! is_string($url) || trim($url) === '') {
+                    continue;
+                }
+            }
+
+            $usableEntry = ['provider' => $provider, 'model' => $model];
+            if (is_string($entry['endpoint_url'] ?? null) && trim((string) $entry['endpoint_url']) !== '') {
+                $usableEntry['endpoint_url'] = trim((string) $entry['endpoint_url']);
+            }
+            $usable[] = $usableEntry;
         }
 
         return $usable;
+    }
+
+    /**
+     * @param  array{provider: string, model: string, endpoint_url?: string}  $entry
+     */
+    public function applyRuntimeConfig(array $entry): void
+    {
+        if (($entry['provider'] ?? null) === 'openai-compatible' && filled($entry['endpoint_url'] ?? null)) {
+            config(['ai.providers.openai-compatible.url' => (string) $entry['endpoint_url']]);
+        }
     }
 }

@@ -25,13 +25,13 @@
             <section class="quiz-opening" aria-label="Opening">
                 {!! $openingHtml !!}
             </section>
-            <form class="quiz-actions" method="post" action="{{ route('submissions.dismiss-opening', $submission) }}">
+            <form class="quiz-actions" method="post" action="{{ ($isDraftPreview ?? false) ? route('quizzes.draft-preview.dismiss-opening', $quiz) : route('submissions.dismiss-opening', $submission) }}">
                 @csrf
                 <button class="quiz-button" type="submit">{{ $opening['start_button_label'] }}</button>
             </form>
         </div>
     @else
-        <form class="quiz-card" method="post" action="{{ route('submissions.save-page', [$submission, $submission->current_page]) }}" novalidate>
+        <form class="quiz-card" method="post" action="{{ ($isDraftPreview ?? false) ? route('quizzes.draft-preview.save-page', [$quiz, $submission->current_page]) : route('submissions.save-page', [$submission, $submission->current_page]) }}" novalidate>
             @csrf
             @if ($showInlineOpening)
                 <section class="quiz-opening" aria-label="Opening">

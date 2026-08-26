@@ -492,7 +492,7 @@ Implement:
 - Prompt templates/version labels as Filament fields on Operational settings.
 - Resume, retention, retry, timeout, and spam settings as Filament fields on Operational settings.
 
-Completion requirement: settings are not merely persisted. Keep `ApplicationSettings` as the closed validation boundary and feature-test each runtime consumer: `ai.quiz` and `ai.report` chains, prompt snapshots, controlled email renderer, public design CSS/tokens, Turnstile/analysis mode, resume/retention, and recovery/lease timeout. Reject secrets, unknown nested fields, executable template syntax, and unsafe CSS.
+Completion requirement: settings are not merely persisted. Keep `ApplicationSettings` as the closed validation boundary and feature-test each runtime consumer: `ai.quiz` and `ai.report` chains, prompt snapshots, controlled email renderer, public design CSS/tokens, Turnstile/analysis mode, resume/retention, recovery/lease timeout, and `notifications.submission_emails` queued admin notices on completed submissions. Reject secrets, unknown nested fields, executable template syntax, and unsafe CSS.
 
 ### 10.2.1 Operational administration completion
 

@@ -21,7 +21,14 @@ use Illuminate\Validation\ValidationException;
 
 class FinalizeSubmission
 {
-    public function __construct(private TurnstileVerifier $turnstile, private AnalysisPromptBuilder $prompts, private SubmissionContext $context, private SubmissionEventRecorder $events, private ApplicationSettings $settings) {}
+    public function __construct(
+        private TurnstileVerifier $turnstile,
+        private AnalysisPromptBuilder $prompts,
+        private SubmissionContext $context,
+        private SubmissionEventRecorder $events,
+        private ApplicationSettings $settings,
+        private NotifyAdminsOfCompletedSubmission $notifyAdmins,
+    ) {}
 
     public function handle(Submission $submission, array $contact, ?string $ip = null, ?Request $request = null): Submission
     {
@@ -68,6 +75,11 @@ class FinalizeSubmission
                     GenerateAnalysisJob::dispatch($analysis->id)->afterCommit();
                 }
             }
+
+            $submissionId = $s->id;
+            DB::afterCommit(function () use ($submissionId): void {
+                $this->notifyAdmins->handle(Submission::query()->with('quiz')->findOrFail($submissionId));
+            });
 
             return $s;
         });

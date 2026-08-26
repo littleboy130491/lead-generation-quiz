@@ -30,7 +30,7 @@ class QuizzesTable
             ExportAction::make('exportFiltered')->label('Export filtered')->exports([ExcelExport::make()->fromTable()->askForFilename()->askForWriterType()]),
         ])->recordActions([
             EditAction::make(),
-            Action::make('previewDraft')->label('Preview draft')->url(fn (Quiz $record): string => route('admin.quizzes.preview', $record)),
+            Action::make('preview')->label('Preview')->url(fn (Quiz $record): string => route('quizzes.show', $record), shouldOpenInNewTab: true),
             Action::make('revisionHistory')->label('Revision history')->url(fn (Quiz $record): string => route('admin.quizzes.history', $record)),
             Action::make('publish')->requiresConfirmation()->action(fn (Quiz $record) => app(PublishQuizRevision::class)->handle($record, auth()->id())),
             Action::make('duplicate')->label('Duplicate draft')->requiresConfirmation()->action(fn (Quiz $record) => app(DuplicateQuiz::class)->handle($record)),

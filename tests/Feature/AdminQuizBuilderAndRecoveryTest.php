@@ -132,6 +132,62 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->actingAs($user)->get(route('admin.quizzes.history', $quiz))->assertOk()->assertSee('Version 1');
     }
 
+    public function test_edit_quiz_header_includes_preview_action_to_live_url(): void
+    {
+        $quiz = Quiz::factory()->create(['slug' => 'previewable-draft']);
+
+        $page = Livewire::actingAs(User::factory()->create())
+            ->test(EditQuiz::class, ['record' => $quiz->id]);
+
+        $action = collect($page->instance()->getCachedHeaderActions())->first(fn ($action) => $action->getName() === 'preview');
+        $this->assertNotNull($action);
+        $this->assertSame(route('quizzes.show', $quiz), $action->getUrl());
+    }
+
+    public function test_guests_cannot_open_draft_quizzes_but_authenticated_users_can_live_preview_them(): void
+    {
+        $quiz = Quiz::factory()->create([
+            'slug' => 'draft-live-preview',
+            'status' => 'draft',
+            'draft_definition' => [
+                'schema_version' => 1,
+                'blocks' => [[
+                    'id' => 'q1',
+                    'type' => 'question',
+                    'question_type' => 'yes_no',
+                    'label' => 'Draft question ready?',
+                    'required' => true,
+                ]],
+            ],
+        ]);
+
+        $this->get(route('quizzes.show', $quiz))->assertNotFound();
+        $this->assertDatabaseCount('submissions', 0);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('quizzes.show', $quiz))
+            ->assertOk()
+            ->assertSee('Draft preview')
+            ->assertSee('Draft question ready?')
+            ->assertSee('not published yet');
+
+        $this->assertDatabaseCount('submissions', 0);
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('quizzes.draft-preview.save-page', [$quiz, 0]), [
+                'answers' => ['q1' => 'yes'],
+                'direction' => 'next',
+            ])
+            ->assertRedirect(route('quizzes.draft-preview.complete', $quiz));
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('quizzes.draft-preview.complete', $quiz))
+            ->assertOk()
+            ->assertSee('Draft preview finished');
+
+        $this->assertDatabaseCount('submissions', 0);
+    }
+
     public function test_admin_builder_payload_creates_a_publishable_multi_page_public_quiz_without_storing_a_raw_password(): void
     {
         $payload = [

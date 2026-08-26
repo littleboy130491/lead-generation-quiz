@@ -26,6 +26,7 @@ class LaravelQuizDefinitionGenerator implements QuizDefinitionGenerator
         $attempts = [];
         foreach ($usable as $entry) {
             try {
+                $this->configured->applyRuntimeConfig($entry);
                 $response = \Laravel\Ai\agent(
                     instructions: $systemPrompt,
                     schema: fn (JsonSchema $schema) => ['schema_version' => $schema->integer()->required(), 'blocks' => $schema->array()->items($schema->object())->required()],

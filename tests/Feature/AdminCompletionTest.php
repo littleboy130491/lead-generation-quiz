@@ -87,6 +87,7 @@ class AdminCompletionTest extends TestCase
             ->assertSee('Quiz AI provider chain')
             ->assertSee('Resume days')
             ->assertSee('Turnstile enabled')
+            ->assertSee('Admin submission notifications')
             ->assertDontSee('Structured JSON');
     }
 
@@ -102,7 +103,7 @@ class AdminCompletionTest extends TestCase
         Livewire::test(OperationalSettings::class)
             ->fillForm([
                 'ai.quiz' => [['provider' => 'openai', 'model' => 'gpt-test']],
-                'ai.report' => [['provider' => 'openai', 'model' => 'gpt-report']],
+                'ai.report' => [['provider' => 'openai-compatible', 'model' => 'gpt-report', 'endpoint_url' => 'https://gateway.example/v1']],
                 'prompts.quiz_version' => 'v1',
                 'prompts.quiz_template' => 'Draft a quiz.',
                 'prompts.report_version' => 'runtime-v2',
@@ -113,13 +114,14 @@ class AdminCompletionTest extends TestCase
                 'operations.retention_days' => 60,
                 'operations.retry_attempts' => 2,
                 'operations.timeout_seconds' => 90,
+                'notifications.submission_emails' => [],
             ])
             ->call('save')
             ->assertHasNoFormErrors();
 
         $settings = app(ApplicationSettings::class);
         $this->assertSame([['provider' => 'openai', 'model' => 'gpt-test']], $settings->get('ai.quiz'));
-        $this->assertSame([['provider' => 'openai', 'model' => 'gpt-report']], $settings->get('ai.report'));
+        $this->assertSame([['provider' => 'openai-compatible', 'model' => 'gpt-report', 'endpoint_url' => 'https://gateway.example/v1']], $settings->get('ai.report'));
         $this->assertSame('Draft a quiz.', $settings->get('prompts')['quiz_template']);
         $this->assertSame('Write the report.', $settings->get('prompts')['report_template']);
         $this->assertSame('runtime-v2', $settings->get('prompts')['report_version']);
@@ -127,6 +129,18 @@ class AdminCompletionTest extends TestCase
         $this->assertSame('manual', $settings->get('spam')['analysis_mode']);
         $this->assertSame(14, $settings->operation('resume_days'));
         $this->assertSame(90, $settings->operation('timeout_seconds'));
+    }
+
+    public function test_operational_settings_require_endpoint_url_for_custom_provider(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        Livewire::test(OperationalSettings::class)
+            ->fillForm([
+                'ai.quiz' => [['provider' => 'openai-compatible', 'model' => 'gpt-test']],
+            ])
+            ->call('save')
+            ->assertHasFormErrors();
     }
 
     public function test_operational_settings_filament_form_rejects_unsafe_provider_names(): void

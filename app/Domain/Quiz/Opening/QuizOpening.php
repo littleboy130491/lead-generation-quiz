@@ -2,8 +2,6 @@
 
 namespace App\Domain\Quiz\Opening;
 
-use App\Models\Submission;
-
 final class QuizOpening
 {
     /**
@@ -40,19 +38,19 @@ final class QuizOpening
     }
 
     /** @param  array<string, mixed>  $definition */
-    public static function isPending(array $definition, Submission $submission): bool
+    public static function isPending(array $definition, object $submission): bool
     {
-        return self::isGated($definition) && ! (bool) data_get($submission->metadata, 'opening_dismissed');
+        return self::isGated($definition) && ! (bool) data_get($submission->metadata ?? null, 'opening_dismissed');
     }
 
     /** @param  array<string, mixed>  $definition */
-    public static function isInlineOnFirstPage(array $definition, Submission $submission): bool
+    public static function isInlineOnFirstPage(array $definition, object $submission): bool
     {
         $opening = self::fromDefinition($definition);
 
         return $opening !== null
             && $opening['hide_start_button']
-            && (int) $submission->current_page === 0
+            && (int) ($submission->current_page ?? 0) === 0
             && ! self::isPending($definition, $submission);
     }
 }

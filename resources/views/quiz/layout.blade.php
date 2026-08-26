@@ -20,6 +20,11 @@
     </style>
 </head>
 <body class="quiz-page @yield('body_class')">
+    @if ($isDraftPreview ?? false)
+        <div class="quiz-draft-banner" role="status">
+            Draft preview — not published yet. Only signed-in administrators can open this quiz.
+        </div>
+    @endif
     <div class="quiz-atmosphere" aria-hidden="true">
         <span class="quiz-orb quiz-orb-a"></span>
         <span class="quiz-orb quiz-orb-b"></span>

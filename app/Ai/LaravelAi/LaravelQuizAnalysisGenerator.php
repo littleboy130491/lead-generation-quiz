@@ -25,6 +25,7 @@ class LaravelQuizAnalysisGenerator implements QuizAnalysisGenerator
             $provider = $entry['provider'];
             $model = $entry['model'];
             try {
+                $this->configured->applyRuntimeConfig($entry);
                 $prompt = $this->prompts->buildFromSnapshot($systemPrompt, $revision, $answers);
                 $response = \Laravel\Ai\agent(instructions: $prompt->system, schema: fn (JsonSchema $schema) => $this->schema($schema))->prompt($prompt->user, provider: Lab::from($provider), model: $model, timeout: 60);
                 $result = ReportSchema::validate($response->toArray());

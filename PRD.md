@@ -384,7 +384,7 @@ Every send or resend appends a delivery record. Only one automatic delivery may 
 
 ### 10.7 Settings and templates
 
-Application settings are a closed, validated non-secret key/value contract: `ai.quiz`, `ai.report`, `prompts`, `report.email`, `design`, `spam`, and `operations`. The Filament Operational settings page edits `ai.quiz`, `ai.report`, `prompts`, `spam`, and `operations` through structured fields (ordered provider/model repeaters, prompt inputs, Turnstile/analysis-mode controls, and numeric resume/retention/retry/timeout fields). It never accepts raw JSON, secrets, or provider credentials. Dedicated Branding & design and Report email templates pages edit public design and email presentation. Runtime consumers remain: quiz/report chains select SDK candidates; prompt templates/version labels are snapshotted with generated work; email subject/templates are substituted through a fixed escaped-placeholder renderer; validated design tokens/CSS are applied to public quiz pages; spam controls govern Turnstile and automatic-analysis policy; and operations governs resume expiry/cookies, retention token scrubbing, recovery attempt limits, and job lease timeout. Provider credentials remain environment-backed Laravel configuration. Unknown keys, secret-like fields, executable template syntax, unsafe CSS, and unsafe token values are rejected.
+Application settings are a closed, validated non-secret key/value contract: `ai.quiz`, `ai.report`, `prompts`, `report.email`, `design`, `spam`, `operations`, and `notifications`. The Filament Operational settings page edits `ai.quiz`, `ai.report`, `prompts`, `spam`, `operations`, and `notifications` through structured fields (ordered provider/model repeaters, prompt inputs, Turnstile/analysis-mode controls, numeric resume/retention/retry/timeout fields, and a multi-value admin notification email list). It never accepts raw JSON, secrets, or provider credentials. Dedicated Branding & design and Report email templates pages edit public design and email presentation. Runtime consumers remain: quiz/report chains select SDK candidates; prompt templates/version labels are snapshotted with generated work; email subject/templates are substituted through a fixed escaped-placeholder renderer; validated design tokens/CSS are applied to public quiz pages; spam controls govern Turnstile and automatic-analysis policy; operations governs resume expiry/cookies, retention token scrubbing, recovery attempt limits, and job lease timeout; and `notifications.submission_emails` queues one administrator notice per configured address when a submission newly becomes `completed`. Provider credentials remain environment-backed Laravel configuration. Unknown keys, secret-like fields, executable template syntax, unsafe CSS, and unsafe token values are rejected.
 
 ## 11. Submission and analysis invariants
 
@@ -435,7 +435,7 @@ Application Blade templates produce report HTML/text from validated structured f
 
 ### 12.3 Provider failover
 
-Quiz generation and report generation have independent ordered provider/model chains. Runtime database settings select from providers already enabled in `config/ai.php`; credentials remain in environment variables.
+Quiz generation and report generation have independent ordered provider/model chains. Runtime database settings select from providers already enabled in `config/ai.php` via a Filament select; credentials remain in environment variables. A **Custom (OpenAI-compatible)** option stores provider `openai-compatible` with a required non-secret `endpoint_url` on the chain entry; the matching API key remains environment-only (`OPENAI_COMPATIBLE_API_KEY`).
 
 Each analysis records the requested chain, each normalized attempt, actual completing provider/model, and whether failover occurred. Failover is intended for eligible transient/provider conditions such as rate limits, overload, unavailability, or insufficient credits, not invalid application requests.
 
@@ -531,7 +531,7 @@ Future policy modes are reserved as:
 - Conditions editor.
 - Design and CSS configuration.
 - Report and email configuration.
-- Draft preview.
+- Draft preview: quiz edit header Preview opens the live public slug in a new tab. Authenticated panel users can open draft quizzes at that URL with a sticky draft banner; guests still receive 404. Draft live preview is session-only (no submissions) and ends on a draft-complete screen instead of contact capture.
 - Publish action creating a revision.
 - Revision history.
 - Submission and funnel analytics.
@@ -557,7 +557,7 @@ Future policy modes are reserved as:
 - Branding & design and Report email templates are single full-width columns (`Width::Full`, form `columns(1)`) so fields use the available panel width rather than Filament's default two-column, 7xl-capped form.
 - Structured design tokens and additional CSS on Branding & design.
 - Email templates on Report email templates.
-- Operational settings as a Filament form: ordered quiz/report provider/model repeaters; AI system prompts for quiz creation (`prompts.quiz_template`) and analysis results (`prompts.report_template`, optional `{{questions_and_answers}}`) with version labels; Turnstile/analysis mode; and resume/retention/retry/timeout numeric fields. Administrators do not edit these as raw JSON.
+- Operational settings as a Filament form: ordered quiz/report provider/model repeaters; AI system prompts for quiz creation (`prompts.quiz_template`) and analysis results (`prompts.report_template`, optional `{{questions_and_answers}}`) with version labels; Turnstile/analysis mode; resume/retention/retry/timeout numeric fields; and one or more admin notification email addresses for completed submissions. Administrators do not edit these as raw JSON.
 - Separate system prompts/provider chains for quiz creation and report generation.
 
 Provider keys are not displayed or stored in ordinary settings.
@@ -641,6 +641,21 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-26 — Provider select with custom endpoint URL
+
+- Operational settings AI chain rows use a Provider select from `config/ai.php`. Choosing Custom (OpenAI-compatible) reveals a required Endpoint URL field stored on the chain entry; API keys remain environment-only.
+
+### 2026-08-26 — Admin email notifications for completed submissions
+
+- Operational settings stores `notifications.submission_emails` as a validated list of one or more administrator addresses (empty disables notices).
+- When a submission newly becomes `completed`, the application queues one notification email per configured address with quiz name, lead email, and an admin link. Idempotent re-finalization does not re-notify.
+
+### 2026-08-26 — Live quiz Preview for drafts
+
+- Quiz edit header includes a Preview action that opens the public quiz URL in a new tab.
+- Authenticated panel users can live-preview draft quizzes at the public slug with a sticky draft banner; guests still get 404. Draft preview uses session state only and never creates submissions.
+- Quiz list Preview opens the same live URL.
 
 ### 2026-08-26 — Engaging public quiz respondent UI
 

@@ -16,6 +16,7 @@ class ApplicationSettings
         'design' => ['tokens' => [], 'additional_css' => ''],
         'spam' => ['turnstile_enabled' => false, 'analysis_mode' => 'always'],
         'operations' => ['resume_days' => 30, 'retention_days' => 90, 'retry_attempts' => 3, 'timeout_seconds' => 60],
+        'notifications' => ['submission_emails' => []],
     ];
 
     /** @return array<string, mixed> */
@@ -33,6 +34,12 @@ class ApplicationSettings
         $this->assertAllowed($key);
         if (! is_array($value)) {
             throw new InvalidArgumentException('Application setting values must be structured arrays.');
+        }
+        if ($key === 'notifications') {
+            $value['submission_emails'] = array_values(array_unique(array_map(
+                fn (mixed $email): string => strtolower(trim((string) $email)),
+                is_array($value['submission_emails'] ?? null) ? $value['submission_emails'] : [],
+            )));
         }
         self::validateStored($key, $value);
         ApplicationSetting::query()->updateOrCreate(['key' => $key], ['value' => $value]);
@@ -64,8 +71,28 @@ class ApplicationSettings
         }
         if (in_array($key, ['ai.quiz', 'ai.report'], true)) {
             foreach ($value as $entry) {
-                if (! is_array($entry) || array_keys($entry) !== ['provider', 'model'] || ! preg_match('/^[a-z0-9._-]{1,80}$/i', (string) $entry['provider']) || ! preg_match('/^[a-z0-9._:-]{1,120}$/i', (string) $entry['model'])) {
+                if (! is_array($entry)) {
                     throw new InvalidArgumentException('Provider chains contain only safe provider and model pairs.');
+                }
+                $allowedEntryKeys = ['provider', 'model', 'endpoint_url'];
+                if (array_diff(array_keys($entry), $allowedEntryKeys) !== [] || ! isset($entry['provider'], $entry['model'])) {
+                    throw new InvalidArgumentException('Provider chains contain only safe provider and model pairs.');
+                }
+                $provider = (string) $entry['provider'];
+                $model = (string) $entry['model'];
+                if (! preg_match('/^[a-z0-9._-]{1,80}$/i', $provider) || ! preg_match('/^[a-z0-9._:-]{1,120}$/i', $model)) {
+                    throw new InvalidArgumentException('Provider chains contain only safe provider and model pairs.');
+                }
+                if (array_key_exists('endpoint_url', $entry) && $entry['endpoint_url'] !== null && $entry['endpoint_url'] !== '') {
+                    if ($provider !== 'openai-compatible') {
+                        throw new InvalidArgumentException('Endpoint URL is only allowed for the custom OpenAI-compatible provider.');
+                    }
+                    $url = (string) $entry['endpoint_url'];
+                    if (strlen($url) > 2048 || filter_var($url, FILTER_VALIDATE_URL) === false || ! in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true)) {
+                        throw new InvalidArgumentException('Custom provider endpoint URL must be a valid http or https URL.');
+                    }
+                } elseif ($provider === 'openai-compatible') {
+                    throw new InvalidArgumentException('Custom OpenAI-compatible provider entries require an endpoint URL.');
                 }
             }
 
@@ -126,6 +153,25 @@ class ApplicationSettings
         if ($key === 'spam') {
             if (! is_bool($value['turnstile_enabled'] ?? null) || ! in_array($value['analysis_mode'] ?? null, ['always', 'manual', 'eligible_only'], true)) {
                 throw new InvalidArgumentException('Spam policy is invalid.');
+            }
+
+            return;
+        }
+        if ($key === 'notifications') {
+            $emails = $value['submission_emails'] ?? null;
+            if (! is_array($emails) || count($emails) > 20) {
+                throw new InvalidArgumentException('Submission notification emails must be a list of at most 20 addresses.');
+            }
+            $seen = [];
+            foreach ($emails as $email) {
+                if (! is_string($email) || strlen($email) > 254 || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    throw new InvalidArgumentException('Submission notification emails must be valid email addresses.');
+                }
+                $normalized = strtolower(trim($email));
+                if (isset($seen[$normalized])) {
+                    throw new InvalidArgumentException('Submission notification emails must be unique.');
+                }
+                $seen[$normalized] = true;
             }
 
             return;

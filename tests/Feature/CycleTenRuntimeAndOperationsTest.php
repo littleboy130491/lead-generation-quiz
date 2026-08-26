@@ -13,6 +13,7 @@ use App\Enums\AnalysisStatus;
 use App\Enums\DeliveryStatus;
 use App\Enums\DeliveryTrigger;
 use App\Enums\SubmissionStatus;
+use App\Mail\SubmissionCompletedAdminMail;
 use App\Models\Analysis;
 use App\Models\Quiz;
 use App\Models\QuizRevision;
@@ -24,6 +25,7 @@ use App\Settings\ApplicationSettings;
 use App\Settings\ReportEmailSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -63,6 +65,7 @@ class CycleTenRuntimeAndOperationsTest extends TestCase
             ['design', ['tokens' => ['background' => 'javascript:alert(1)'], 'additional_css' => 'body { color: red; }']],
             ['report.email', ['subject' => '<?php echo 1', 'html' => '{!! $unsafe !!}', 'text' => 'plain']],
             ['operations', ['resume_days' => 1, 'unknown' => true]],
+            ['notifications', ['submission_emails' => ['not-an-email']]],
         ] as [$key, $value]) {
             try {
                 $settings->put($key, $value);
@@ -71,6 +74,27 @@ class CycleTenRuntimeAndOperationsTest extends TestCase
                 $this->assertTrue(true);
             }
         }
+    }
+
+    public function test_completed_submission_queues_admin_notification_emails_once(): void
+    {
+        Bus::fake();
+        Mail::fake();
+        app(ApplicationSettings::class)->put('notifications', [
+            'submission_emails' => ['Ops@Example.test', 'ops@example.test', 'second@example.test'],
+        ]);
+        $submission = $this->submission(['status' => SubmissionStatus::AwaitingContact]);
+
+        app(FinalizeSubmission::class)->handle($submission, ['email' => 'lead@example.test']);
+        app(FinalizeSubmission::class)->handle($submission->fresh(), ['email' => 'lead@example.test']);
+
+        Mail::assertQueued(SubmissionCompletedAdminMail::class, 2);
+        Mail::assertQueued(SubmissionCompletedAdminMail::class, fn (SubmissionCompletedAdminMail $mail): bool => $mail->hasTo('ops@example.test'));
+        Mail::assertQueued(SubmissionCompletedAdminMail::class, fn (SubmissionCompletedAdminMail $mail): bool => $mail->hasTo('second@example.test'));
+        $this->assertSame(
+            ['ops@example.test', 'second@example.test'],
+            app(ApplicationSettings::class)->get('notifications')['submission_emails'],
+        );
     }
 
     public function test_runtime_spam_policy_requires_turnstile_and_manual_mode_does_not_append_automatic_analysis(): void
