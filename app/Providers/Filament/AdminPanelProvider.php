@@ -30,6 +30,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->viteTheme('resources/css/quiz-chat-theme.css')
             ->colors([
                 'primary' => Color::Amber,
             ])
