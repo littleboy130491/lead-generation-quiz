@@ -7,3 +7,18 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/* Quiz interview palette: customize these tokens to retheme the chat. */
+:root {
+    --quiz-chat-primary-50: #fffbeb;
+    --quiz-chat-primary-100: #fef3c7;
+    --quiz-chat-primary-500: #f59e0b;
+    --quiz-chat-primary-600: #d97706;
+    --quiz-chat-primary-700: #b45309;
+    --quiz-chat-primary-rgb: 217 119 6;
+    --quiz-chat-ink: #172033;
+    --quiz-chat-muted: #697386;
+    --quiz-chat-line: #e6e9ef;
+    --quiz-chat-surface: #f7f8fa;
+    --quiz-chat-canvas: #ffffff;
+}
