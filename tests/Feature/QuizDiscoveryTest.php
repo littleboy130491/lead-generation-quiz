@@ -28,6 +28,6 @@ class QuizDiscoveryTest extends TestCase
         $this->assertSame('interviewing', $session->status);
         $this->assertSame('I need a lead quiz for my consulting business.', $session->brief['business_context']);
         $this->assertSame(['user', 'assistant'], $session->messages()->pluck('role')->all());
-        $this->assertStringContainsString('target audience', $session->messages()->latest('id')->value('content'));
+        $this->assertStringContainsString('outcome', $session->messages()->latest('id')->value('content'));
     }
 }

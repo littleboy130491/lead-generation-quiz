@@ -25,10 +25,10 @@ class RunQuizDiscovery
             'system_prompt_snapshot' => (string) ($prompts['discovery_template'] ?? QuizDiscoveryPrompt::DEFAULT_TEMPLATE),
         ]);
 
-        return $this->reply($session, $opening);
+        return $this->reply($session, $opening, 'business_context');
     }
 
-    public function reply(QuizDiscoverySession $session, string $message): QuizDiscoverySession
+    public function reply(QuizDiscoverySession $session, string $message, ?string $briefField = null): QuizDiscoverySession
     {
         $message = trim(strip_tags($message));
         if ($message === '') {
@@ -37,7 +37,7 @@ class RunQuizDiscovery
 
         $session->messages()->create(['role' => 'user', 'content' => mb_substr($message, 0, 4000)]);
         $brief = QuizDiscoveryBrief::merge($session->brief ?? [], [
-            QuizDiscoveryBrief::nextMissingField($session->brief ?? []) ?? 'business_context' => $message,
+            $briefField ?? QuizDiscoveryBrief::nextMissingField($session->brief ?? []) ?? 'business_context' => $message,
         ]);
         $history = $session->messages()->orderBy('id')->get(['role', 'content'])->map(fn ($item) => $item->only(['role', 'content']))->all();
         $response = $this->interviewer->respond($brief, $history, $session->system_prompt_snapshot);

@@ -48,7 +48,7 @@ final class QuizDiscoveryBrief
     /** @param array<string, mixed> $brief */
     public static function nextMissingField(array $brief): ?string
     {
-        foreach (['business_context', 'target_audience', 'objective', 'desired_insight'] as $field) {
+        foreach (['objective', 'target_audience', 'business_context', 'desired_insight'] as $field) {
             if (blank($brief[$field] ?? null)) {
                 return $field;
             }

@@ -8,10 +8,10 @@ class RuleBasedQuizDiscoveryInterviewer implements QuizDiscoveryInterviewer
     {
         $field = QuizDiscoveryBrief::nextMissingField($brief);
         $questions = [
-            'business_context' => 'What is the business, offer, or situation this quiz should focus on?',
-            'target_audience' => 'Who is the target audience for this quiz?',
-            'objective' => 'What should this quiz help the business achieve?',
-            'desired_insight' => 'What useful insight or next step should respondents receive at the end?',
+            'objective' => 'Before we get into the details, what outcome do you want this quiz to create—for the people taking it and for your brand?',
+            'target_audience' => 'Who is the ideal person taking this quiz? Describe their current situation, biggest frustrations or problems, and the progress or dreams they want to reach.',
+            'business_context' => 'What product, service, or brand experience can you genuinely offer to help them?',
+            'desired_insight' => 'At the end, what clarity, useful information, recommendation, or next step should they receive—and how should that helpful experience begin building trust in your brand?',
         ];
 
         return [
