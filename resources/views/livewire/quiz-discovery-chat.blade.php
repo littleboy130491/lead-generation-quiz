@@ -54,7 +54,7 @@
                 <section class="quiz-chat__brief">
                     <h2>Review the quiz brief</h2>
                     <p>Edit these details before creating the draft. The conversation itself is never passed directly into generation.</p>
-                    <form wire:submit="saveBrief">
+                    <div class="quiz-chat__brief-editor">
                         <div class="quiz-chat__fields">
                             <div class="quiz-chat__field quiz-chat__field--wide"><label for="brief-context">Business context</label><textarea id="brief-context" wire:model="brief.business_context" rows="3"></textarea></div>
                             <div class="quiz-chat__field"><label for="brief-audience">Target audience</label><input id="brief-audience" wire:model="brief.target_audience" /></div>
@@ -63,8 +63,8 @@
                             <div class="quiz-chat__field"><label for="brief-count">Number of questions</label><input id="brief-count" type="number" min="1" max="30" wire:model="brief.question_count" /></div>
                             <div class="quiz-chat__field"><label for="brief-tone">Tone</label><input id="brief-tone" wire:model="brief.tone" /></div>
                         </div>
-                        <div class="quiz-chat__actions"><button class="quiz-chat__send quiz-chat__save" type="submit">Save changes</button><button class="quiz-chat__send" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Generate draft</button></div>
-                    </form>
+                        <div class="quiz-chat__actions"><button class="quiz-chat__send quiz-chat__save" type="button" wire:click="saveBrief" wire:loading.attr="disabled">Save changes</button><button class="quiz-chat__send" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Generate draft</button></div>
+                    </div>
                 </section>
             @elseif ($sessionId === null)
                 <div class="quiz-chat__welcome"><h2>What quiz do you want to create?</h2><p>Tell me the rough idea. I will ask only what is needed to make a useful lead-generation quiz.</p></div>
@@ -76,11 +76,11 @@
         </main>
 
         @if (! $showBrief)
-            <form wire:submit="{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}" class="quiz-chat__composer">
+            <div class="quiz-chat__composer" role="group" aria-label="{{ $sessionId === null ? 'Start chat' : 'Send answer' }}">
                 <label class="sr-only" for="quiz-chat-message">{{ $sessionId === null ? 'Your quiz idea' : 'Your answer' }}</label>
                 <textarea id="quiz-chat-message" class="quiz-chat__textarea" wire:model="{{ $sessionId === null ? 'opening' : 'reply' }}" rows="2" placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write your answer…' }}"></textarea>
-                <button class="quiz-chat__send" type="submit" wire:loading.attr="disabled"><span>{{ $sessionId === null ? 'Start chat' : 'Send' }}</span> →</button>
-            </form>
+                <button class="quiz-chat__send" type="button" wire:click="{{ $sessionId === null ? 'startDiscovery' : 'sendReply' }}" wire:loading.attr="disabled"><span>{{ $sessionId === null ? 'Start chat' : 'Send' }}</span> →</button>
+            </div>
         @endif
     </div>
 
