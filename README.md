@@ -40,6 +40,8 @@ php artisan migrate
 php artisan db:seed --class=AdminRoleSeeder
 php artisan storage:link
 php artisan curator:token
+php artisan livewire:publish --assets
+php artisan filament:assets
 php artisan optimize:clear
 
 npm run build
@@ -49,6 +51,8 @@ php artisan serve
 Then create an administrator (see [docs/SETUP.md](docs/SETUP.md#5-create-an-administrator)) and sign in at `/admin/login`.
 
 **Media uploads require** `php artisan storage:link` and `php artisan curator:token` (sets `CURATOR_GLIDE_TOKEN` in `.env`). Skipping either causes Curator/Glide failures.
+
+**Filament/Livewire JS:** publish static assets with `php artisan livewire:publish --assets` (and `filament:assets`). Without that, Livewire tries to serve JS through a PHP route that often returns 500 behind Nginx or a subdirectory mount. Composer `post-autoload-dump` / `post-update-cmd` also republish Livewire assets.
 
 ## Configuration highlights
 

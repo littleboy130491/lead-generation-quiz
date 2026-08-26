@@ -98,6 +98,8 @@ composer install --no-dev --optimize-autoloader
 php artisan migrate --force
 php artisan storage:link
 php artisan curator:token
+php artisan livewire:publish --assets
+php artisan filament:assets
 php artisan optimize:clear
 ```
 
@@ -108,4 +110,4 @@ php artisan route:list --path=admin/manage-
 php artisan migrate:status
 ```
 
-Media library uploads require a non-empty `CURATOR_GLIDE_TOKEN` (from `php artisan curator:token`) and `php artisan storage:link`.
+Media library uploads require a non-empty `CURATOR_GLIDE_TOKEN` (from `php artisan curator:token`) and `php artisan storage:link`. Filament login requires published Livewire assets (`public/vendor/livewire`); otherwise the default PHP-served Livewire JS route often returns 500 behind Nginx or a subdirectory mount.

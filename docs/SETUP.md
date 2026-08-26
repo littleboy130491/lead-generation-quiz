@@ -53,14 +53,18 @@ php artisan migrate
 
 For MySQL/Postgres, set `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`, then run `php artisan migrate` only (no `touch`).
 
-## 4. Roles, storage link, and Curator media token
+## 4. Roles, storage link, Curator media token, and Livewire assets
 
 Media uploads (Filament Curator / Glide) **require** a Glide signing token. Without it, media operations fail with an error telling you to run `php artisan curator:token`.
+
+Filament login and admin pages need Livewire’s JavaScript. By default Livewire serves that file through a **PHP route** (for example `/livewire-…/livewire.js`). On many Nginx / subdirectory / static-fronted deploys that route returns **500** or is not rewritten to Laravel. Publishing the assets makes Nginx serve them as ordinary static files from `public/vendor/livewire` (Livewire auto-detects `public/vendor/livewire/manifest.json`).
 
 ```bash
 php artisan db:seed --class=AdminRoleSeeder
 php artisan storage:link
 php artisan curator:token
+php artisan livewire:publish --assets
+php artisan filament:assets
 php artisan optimize:clear
 ```
 
@@ -71,9 +75,11 @@ What these do:
 | `AdminRoleSeeder` | Creates Shield roles/permissions (`super_admin`, `admin`, `quiz_manager`, `submission_manager`) |
 | `storage:link` | Links `public/storage` → `storage/app/public` so uploaded media is reachable |
 | `curator:token` | Writes a fresh `CURATOR_GLIDE_TOKEN=...` into `.env` (required for Curator/Glide) |
+| `livewire:publish --assets` | Copies Livewire JS/CSS into `public/vendor/livewire` so Filament does not depend on the PHP asset route |
+| `filament:assets` | Publishes Filament panel CSS/JS under `public/css/filament` and `public/js/filament` |
 | `optimize:clear` | Clears config/route/view caches so the new token and env values are loaded |
 
-Confirm `.env` contains a non-empty `CURATOR_GLIDE_TOKEN` and `CURATOR_DEFAULT_DISK=public`.
+Confirm `.env` contains a non-empty `CURATOR_GLIDE_TOKEN` and `CURATOR_DEFAULT_DISK=public`. Confirm `public/vendor/livewire/manifest.json` exists after publishing Livewire.
 
 Optional demo quiz (publishes `business-readiness-check` with opening page + AI result mode when no active revision exists):
 
@@ -219,6 +225,8 @@ php artisan migrate --force
 php artisan db:seed --class=AdminRoleSeeder
 php artisan storage:link
 php artisan curator:token
+php artisan livewire:publish --assets
+php artisan filament:assets
 php artisan optimize:clear
 npm ci
 npm run build
@@ -230,6 +238,7 @@ Then: set `APP_DEBUG=false`, configure HTTPS/`APP_URL`, durable database/queue, 
 
 | Symptom | Fix |
 |---|---|
+| Filament login Livewire JS **500** / script fails to load | Run `php artisan livewire:publish --assets` (and `php artisan filament:assets`). Confirm `public/vendor/livewire/manifest.json` is web-reachable. Default Livewire serves JS via a PHP route that often breaks under Nginx/subdirectory mounts. |
 | Media upload / Glide error about missing token | Run `php artisan curator:token` then `php artisan optimize:clear`. Confirm `CURATOR_GLIDE_TOKEN` in `.env`. |
 | Uploaded files 404 | Run `php artisan storage:link`. Confirm `CURATOR_DEFAULT_DISK=public`. |
 | Generate AI draft Confirm disabled | Set a provider key in `.env` and add a matching provider/model row under Operational settings. |

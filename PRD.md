@@ -642,6 +642,10 @@ The administrator-only Branding & design settings page is available to `super_ad
 
 ## 23. Change Log
 
+### 2026-08-26 — Publish Livewire assets for Filament login
+
+- Documented and automated `php artisan livewire:publish --assets` so Filament/Livewire JS is served as static files under `public/vendor/livewire` instead of the default PHP asset route (which commonly 500s behind Nginx or subdirectory mounts). Composer post-autoload-dump/post-update republish the assets; setup docs and deploy checklists include the step.
+
 ### 2026-08-26 — Demo quiz seeder matches current V1 schema
 
 - `LeadGenerationQuizSeeder` now publishes a definition with `opening`, `result.mode=ai`, scored choice/yes-no fields, checkbox multi-select, and an `exclude_from_ai` question. Unpublished drafts are refreshed on re-seed; existing active revisions stay immutable. `DatabaseSeeder` creates an `admin@example.test` admin role user before the demo quiz.
