@@ -7,12 +7,13 @@ use App\Ai\Contracts\QuizAnalysisGenerator;
 use App\Ai\Data\ReportSchema;
 use App\Ai\GenerationException;
 use App\Ai\Prompt\AnalysisPromptBuilder;
+use App\Settings\ApplicationSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Enums\Lab;
 
 class LaravelQuizAnalysisGenerator implements QuizAnalysisGenerator
 {
-    public function __construct(private AnalysisPromptBuilder $prompts, private ConfiguredAiProviders $configured) {}
+    public function __construct(private AnalysisPromptBuilder $prompts, private ConfiguredAiProviders $configured, private ApplicationSettings $settings) {}
 
     public function generate(array $revision, array $answers, array $chain, string $systemPrompt): array
     {
@@ -21,13 +22,14 @@ class LaravelQuizAnalysisGenerator implements QuizAnalysisGenerator
         if ($usable === []) {
             throw new GenerationException('ai_unavailable', ConfiguredAiProviders::UNAVAILABLE_MESSAGE);
         }
+        $timeout = $this->settings->operation('timeout_seconds');
         foreach ($usable as $entry) {
             $provider = $entry['provider'];
             $model = $entry['model'];
             try {
                 $this->configured->applyRuntimeConfig($entry);
                 $prompt = $this->prompts->buildFromSnapshot($systemPrompt, $revision, $answers);
-                $response = \Laravel\Ai\agent(instructions: $prompt->system, schema: fn (JsonSchema $schema) => $this->schema($schema))->prompt($prompt->user, provider: Lab::from($provider), model: $model, timeout: 60);
+                $response = \Laravel\Ai\agent(instructions: $prompt->system, schema: fn (JsonSchema $schema) => $this->schema($schema))->prompt($prompt->user, provider: Lab::from($provider), model: $model, timeout: $timeout);
                 $result = ReportSchema::validate($response->toArray());
                 $attempts[] = compact('provider', 'model') + ['status' => 'completed'];
 

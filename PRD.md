@@ -445,6 +445,12 @@ Quiz generation and report generation have independent ordered provider/model ch
 
 Each analysis records the requested chain, each normalized attempt, actual completing provider/model, and whether failover occurred. Failover is intended for eligible transient/provider conditions such as rate limits, overload, unavailability, or insufficient credits, not invalid application requests.
 
+### 12.3a Structured-output schema contract and synchronous timeouts
+
+Providers apply the quiz-definition and analysis JSON schemas in strict mode, which requires that every declared property also appear in that object's `required` list. Application schemas therefore declare all properties as required and express optional fields as required-and-nullable rather than omitting them. Because strict mode forces the model to emit every property, the application prunes null values and empty collections from the model response before validation, so the persisted definition contains only fields the block type actually supports. `QuizDefinitionValidator` remains the authority after pruning. Schema fields with a closed value set (block type, question type, result mode, visibility operator, interview action) declare that set as an enum so decoding is constrained rather than free-form.
+
+Every synchronous provider invocation uses the Operational setting `operations.timeout_seconds` as its per-attempt request timeout instead of a hardcoded value. Quiz discovery, quiz-draft generation, and analysis all honor this setting. Administrator-facing generation runs inside the web request, so the application also raises the PHP execution limit for that request to the configured timeout multiplied by the number of chain entries, plus a fixed overhead allowance. Deployments must set web-server and PHP-FPM timeouts at least as high as that total; the required values are normative in `docs/SETUP.md`. When a draft fails, the administrator-facing notification reports the normalized per-provider failure or validator message rather than a generic failure string; secrets are never included.
+
 ### 12.4 Prompt-injection defense
 
 - Respondent answers are explicitly labeled and delimited as untrusted data.
@@ -647,6 +653,14 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-27 — Strict structured-output schemas and configurable synchronous timeouts
+
+- Fixed the quiz-definition and interview JSON schemas for provider strict mode: every property is now declared required, and optional fields are required-and-nullable instead of omitted. Closed value sets (block type, question type, result mode, visibility operator, interview action) are declared as enums. Previously most properties were optional while providers still sent `strict: true`, which made grammar-constrained decoding slow or invalid and burned tokens on requests the application then discarded.
+- Added response pruning that removes null values and empty collections from model output before validation, so strict-mode placeholders do not violate the per-block-type field allowlist.
+- Quiz discovery, quiz-draft generation, and analysis now use the Operational setting `operations.timeout_seconds` as their per-attempt provider timeout instead of a hardcoded 60 seconds. The interview previously sent no timeout at all.
+- Administrator-facing generation raises the PHP execution limit for its own request to the configured timeout times the chain length plus a fixed overhead, and `docs/SETUP.md` now records the required web-server and PHP-FPM timeout floors. Default PHP-FPM limits terminated the request before the provider responded, producing a gateway error after the provider had already been billed.
+- Draft-generation failures now surface the normalized per-provider error or validator message in the chat notification instead of a generic failure string.
 
 ### 2026-08-27 — AI interview is the only admin quiz-creation assistant
 

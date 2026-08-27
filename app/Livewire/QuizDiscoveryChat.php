@@ -5,12 +5,14 @@ namespace App\Livewire;
 use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Actions\Quizzes\RunQuizDiscovery;
 use App\Ai\Discovery\QuizDiscoveryBrief;
+use App\Ai\GenerationException;
 use App\Enums\QuizStatus;
 use App\Filament\Resources\Quizzes\Pages\EditQuiz;
 use App\Models\Quiz;
 use App\Models\QuizDiscoverySession;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
 class QuizDiscoveryChat extends Component
@@ -114,7 +116,12 @@ class QuizDiscoveryChat extends Component
         } catch (\Throwable $exception) {
             report($exception);
             $session->update(['status' => 'interviewing', 'brief' => $brief]);
-            Notification::make()->danger()->title('Quiz draft generation could not be completed.')->send();
+            Notification::make()
+                ->danger()
+                ->title('Quiz draft generation could not be completed.')
+                ->body($this->failureReason($exception))
+                ->persistent()
+                ->send();
 
             return;
         }
@@ -141,6 +148,28 @@ class QuizDiscoveryChat extends Component
         if ($this->session()?->status === 'ready') {
             $this->generateDraft();
         }
+    }
+
+    /**
+     * Surface why the draft failed so administrators can correct the provider
+     * chain, credentials, or brief without reading the application log.
+     */
+    private function failureReason(\Throwable $exception): string
+    {
+        if ($exception instanceof ValidationException) {
+            return 'The model returned a draft that does not match the quiz contract: '
+                .implode(' ', $exception->validator->errors()->all());
+        }
+
+        if (! $exception instanceof GenerationException) {
+            return str($exception->getMessage())->limit(300)->toString();
+        }
+
+        $failures = collect($exception->attempts)
+            ->map(fn (array $attempt): string => trim(($attempt['provider'] ?? 'provider').' '.($attempt['model'] ?? '').': '.($attempt['message'] ?? 'failed')))
+            ->implode(' | ');
+
+        return str($failures !== '' ? $failures : $exception->getMessage())->limit(500)->toString();
     }
 
     /**

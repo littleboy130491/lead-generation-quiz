@@ -9,6 +9,7 @@ use App\Domain\Quiz\Validation\QuizDefinitionValidator;
 use App\Models\Quiz;
 use App\Models\QuizDraftGeneration;
 use App\Settings\ApplicationSettings;
+use App\Support\RequestTimeLimit;
 use Illuminate\Support\Facades\DB;
 
 class GenerateQuizDraft
@@ -26,6 +27,7 @@ class GenerateQuizDraft
         $prompts = $this->settings->get('prompts');
         $chain = $this->settings->get('ai.quiz');
         $systemPrompt = $this->prompt->compose((string) $prompts['quiz_template']);
+        RequestTimeLimit::extendForAiCall($this->settings->operation('timeout_seconds'), count($chain));
         $audit = QuizDraftGeneration::create([
             'quiz_id' => $quiz->id,
             'brief_hash' => hash('sha256', json_encode($brief, JSON_THROW_ON_ERROR)),

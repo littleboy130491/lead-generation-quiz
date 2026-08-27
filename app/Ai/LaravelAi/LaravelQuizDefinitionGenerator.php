@@ -5,8 +5,10 @@ namespace App\Ai\LaravelAi;
 use App\Ai\ConfiguredAiProviders;
 use App\Ai\Contracts\QuizDefinitionGenerator;
 use App\Ai\Data\QuizDefinitionJsonSchema;
+use App\Ai\Data\QuizDefinitionSanitizer;
 use App\Ai\GenerationException;
 use App\Ai\HeuristicQuizDefinitionGenerator;
+use App\Settings\ApplicationSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Enums\Lab;
 
@@ -15,6 +17,7 @@ class LaravelQuizDefinitionGenerator implements QuizDefinitionGenerator
     public function __construct(
         private ConfiguredAiProviders $configured,
         private HeuristicQuizDefinitionGenerator $heuristic,
+        private ApplicationSettings $settings,
     ) {}
 
     public function generate(array $brief, array $providerChain, string $systemPrompt): array
@@ -24,6 +27,7 @@ class LaravelQuizDefinitionGenerator implements QuizDefinitionGenerator
             return $this->heuristic->generate($brief);
         }
 
+        $timeout = $this->settings->operation('timeout_seconds');
         $attempts = [];
         foreach ($usable as $entry) {
             try {
@@ -31,9 +35,9 @@ class LaravelQuizDefinitionGenerator implements QuizDefinitionGenerator
                 $response = \Laravel\Ai\agent(
                     instructions: $systemPrompt,
                     schema: fn (JsonSchema $schema) => QuizDefinitionJsonSchema::definition($schema),
-                )->prompt('<untrusted_administrator_brief>'.json_encode($brief, JSON_THROW_ON_ERROR).'</untrusted_administrator_brief>', provider: Lab::from($entry['provider']), model: $entry['model'], timeout: 60);
+                )->prompt('<untrusted_administrator_brief>'.json_encode($brief, JSON_THROW_ON_ERROR).'</untrusted_administrator_brief>', provider: Lab::from($entry['provider']), model: $entry['model'], timeout: $timeout);
 
-                return $response->toArray();
+                return QuizDefinitionSanitizer::sanitize($response->toArray());
             } catch (\Throwable $exception) {
                 $attempts[] = [
                     'provider' => $entry['provider'],

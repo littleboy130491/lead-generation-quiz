@@ -196,6 +196,29 @@ The `provider` string must match a key in `config/ai.php`, and that provider’s
 
 More detail: [ADMIN_SETTINGS.md](ADMIN_SETTINGS.md).
 
+### Request timeouts for synchronous generation
+
+The AI quiz interview and quiz-draft generation call the provider inside the web request. Each attempt is allowed `operations.timeout_seconds` (Operational settings, default 60), and a chain is tried in order, so the worst case is `timeout_seconds × chain length + 15` seconds. The application raises its own PHP execution limit to that value, but the web server and PHP-FPM must allow it too or the request is killed after the provider has already been billed for the tokens.
+
+With a default 60-second timeout and a two-entry chain, allow at least 135 seconds:
+
+```nginx
+# nginx server block, inside location ~ \.php$
+fastcgi_read_timeout 180;
+```
+
+```ini
+; /etc/php/8.4/fpm/pool.d/www.conf
+request_terminate_timeout = 180
+```
+
+```ini
+; /etc/php/8.4/fpm/php.ini — must be at least timeout_seconds × chain length + 15
+max_execution_time = 180
+```
+
+Reload after editing: `sudo systemctl reload php8.4-fpm nginx`. Lowering `operations.timeout_seconds` or shortening the chain reduces the required floor.
+
 ## 9. Other common environment settings
 
 ```dotenv
@@ -242,6 +265,8 @@ Then: set `APP_DEBUG=false`, configure HTTPS/`APP_URL`, durable database/queue, 
 | Media upload / Glide error about missing token | Run `php artisan curator:token` then `php artisan optimize:clear`. Confirm `CURATOR_GLIDE_TOKEN` in `.env`. |
 | Uploaded files 404 | Run `php artisan storage:link`. Confirm `CURATOR_DEFAULT_DISK=public`. |
 | AI quiz interview uses a basic scaffold | Optional: set a provider key in `.env` and add a matching Quiz AI provider/model row under Operational settings for model-written drafts. |
+| Quiz generation hangs then returns a gateway error (502/503/504) while the provider dashboard shows the tokens were billed | The request was killed before the provider replied. Raise `fastcgi_read_timeout`, `request_terminate_timeout`, and `max_execution_time` as described in [Request timeouts for synchronous generation](#request-timeouts-for-synchronous-generation), or lower `operations.timeout_seconds`. |
+| Quiz draft generation reports a provider or contract error | The chat notification now names the failing provider/model and reason. The same normalized message is stored on the `quiz_draft_generations` audit row. |
 | `/api/v1/*` returns `401 unauthenticated` | Set `QUIZ_GENERATION_API_TOKEN` and send `Authorization: Bearer …`. |
 | Cannot access Branding & design | Sign in as `admin` or `super_admin` after `AdminRoleSeeder`. |
 | Stale config after editing `.env` | `php artisan optimize:clear` |
