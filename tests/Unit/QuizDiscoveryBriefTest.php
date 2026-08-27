@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Ai\Discovery\QuizDiscoveryBrief;
+use App\Ai\Discovery\QuizDiscoveryIntent;
 use Tests\TestCase;
 
 class QuizDiscoveryBriefTest extends TestCase
@@ -19,5 +20,13 @@ class QuizDiscoveryBriefTest extends TestCase
         $this->assertSame('Identify their current business bottleneck', $brief['objective']);
         $this->assertArrayNotHasKey('unexpected', $brief);
         $this->assertSame('target_audience', QuizDiscoveryBrief::nextMissingField($brief));
+    }
+
+    public function test_execute_now_phrases_are_detected_as_control_intent(): void
+    {
+        $this->assertTrue(QuizDiscoveryIntent::wantsExecute('execute now'));
+        $this->assertTrue(QuizDiscoveryIntent::wantsExecute('Please generate the draft'));
+        $this->assertTrue(QuizDiscoveryIntent::isControl('create the quiz'));
+        $this->assertFalse(QuizDiscoveryIntent::wantsExecute('I want founders to execute a weekly ops review'));
     }
 }

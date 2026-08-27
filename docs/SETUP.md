@@ -183,7 +183,7 @@ Provider registry and defaults are in `config/ai.php` (`openai`, `anthropic`, `g
 
 Under **Operational settings**:
 
-1. **Quiz AI provider chain** — used by Generate AI draft  
+1. **Quiz AI provider chain** — used by AI quiz interview draft generation  
 2. **Report AI provider chain** — used by submission analysis  
 
 Add ordered rows such as:
@@ -192,7 +192,7 @@ Add ordered rows such as:
 |---|---|
 | `openai` | `gpt-4.1` |
 
-The `provider` string must match a key in `config/ai.php`, and that provider’s env key must be set. Entries without a usable key are skipped (Generate AI draft stays visible but Confirm is disabled when no quiz chain entry is usable).
+The `provider` string must match a key in `config/ai.php`, and that provider’s env key must be set. Entries without a usable key are skipped (interview and API generation still produce a structural scaffold from the brief).
 
 More detail: [ADMIN_SETTINGS.md](ADMIN_SETTINGS.md).
 
@@ -241,7 +241,7 @@ Then: set `APP_DEBUG=false`, configure HTTPS/`APP_URL`, durable database/queue, 
 | Filament login Livewire JS **500** / script fails to load | Run `php artisan livewire:publish --assets` (and `php artisan filament:assets`). Confirm `public/vendor/livewire/manifest.json` is web-reachable. Default Livewire serves JS via a PHP route that often breaks under Nginx/subdirectory mounts. |
 | Media upload / Glide error about missing token | Run `php artisan curator:token` then `php artisan optimize:clear`. Confirm `CURATOR_GLIDE_TOKEN` in `.env`. |
 | Uploaded files 404 | Run `php artisan storage:link`. Confirm `CURATOR_DEFAULT_DISK=public`. |
-| Generate AI draft uses a basic scaffold | Optional: set a provider key in `.env` and add a matching Quiz AI provider/model row under Operational settings for model-written drafts. |
+| AI quiz interview draft uses a basic scaffold | Optional: set a provider key in `.env` and add a matching Quiz AI provider/model row under Operational settings for model-written drafts. |
 | `/api/v1/*` returns `401 unauthenticated` | Set `QUIZ_GENERATION_API_TOKEN` and send `Authorization: Bearer …`. |
 | Cannot access Branding & design | Sign in as `admin` or `super_admin` after `AdminRoleSeeder`. |
 | Stale config after editing `.env` | `php artisan optimize:clear` |

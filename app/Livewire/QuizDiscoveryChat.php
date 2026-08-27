@@ -4,7 +4,9 @@ namespace App\Livewire;
 
 use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Actions\Quizzes\RunQuizDiscovery;
+use App\Ai\Discovery\QuizDiscoveryAction;
 use App\Ai\Discovery\QuizDiscoveryBrief;
+use App\Ai\Discovery\QuizDiscoveryTurn;
 use App\Enums\QuizStatus;
 use App\Filament\Resources\Quizzes\Pages\EditQuiz;
 use App\Models\Quiz;
@@ -52,7 +54,7 @@ class QuizDiscoveryChat extends Component
         }
 
         $this->validate(['opening' => ['required', 'string', 'max:4000']]);
-        $this->loadSession(app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening));
+        $this->applyTurn(app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening));
         $this->reset('opening');
     }
 
@@ -68,7 +70,7 @@ class QuizDiscoveryChat extends Component
             return;
         }
 
-        $this->loadSession(app(RunQuizDiscovery::class)->reply($session, $this->reply));
+        $this->applyTurn(app(RunQuizDiscovery::class)->reply($session, $this->reply));
         $this->reset('reply');
     }
 
@@ -127,6 +129,22 @@ class QuizDiscoveryChat extends Component
             ->where('user_id', auth()->id())
             ->with('messages')
             ->first();
+    }
+
+    private function applyTurn(QuizDiscoveryTurn $turn): void
+    {
+        $this->loadSession($turn->session);
+
+        if ($turn->action === QuizDiscoveryAction::Ready) {
+            $this->showBrief = true;
+
+            return;
+        }
+
+        if ($turn->action === QuizDiscoveryAction::Execute) {
+            $this->showBrief = true;
+            $this->generateDraft();
+        }
     }
 
     private function loadSession(QuizDiscoverySession $session): void

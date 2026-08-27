@@ -75,11 +75,11 @@ OPENAI_COMPATIBLE_API_KEY=...
 OPENAI_COMPATIBLE_URL=https://your-gateway.example/v1
 ```
 
-The `provider` select must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`). **Custom (OpenAI-compatible)** stores provider `openai-compatible` with a required endpoint URL and uses `OPENAI_COMPATIBLE_API_KEY` from the environment. Entries without a usable key (or custom entries without a URL) are skipped. If the quiz chain has no usable credentials, Generate AI draft and `POST /api/v1/quizzes/generate` still produce a validated structural scaffold from the brief; only report/analysis generation requires usable report-chain credentials.
+The `provider` select must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`). **Custom (OpenAI-compatible)** stores provider `openai-compatible` with a required endpoint URL and uses `OPENAI_COMPATIBLE_API_KEY` from the environment. Entries without a usable key (or custom entries without a URL) are skipped. If the quiz chain has no usable credentials, the AI quiz interview and `POST /api/v1/quizzes/generate` still produce a validated structural scaffold from the brief; only report/analysis generation requires usable report-chain credentials.
 
 ### Models
 
-Enter the model id your account supports (for example `gpt-4.1` for OpenAI). Quiz chain drives Generate AI draft; report chain drives submission analysis.
+Enter the model id your account supports (for example `gpt-4.1` for OpenAI). Quiz chain drives AI quiz interview draft generation; report chain drives submission analysis.
 
 Full install path including Curator media token: [SETUP.md](SETUP.md).
 
