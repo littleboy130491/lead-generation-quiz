@@ -451,7 +451,7 @@ Each analysis records the requested chain, each normalized attempt, actual compl
 
 Providers apply the quiz-definition and analysis JSON schemas in strict mode, which requires that every declared property also appear in that object's `required` list. Application schemas therefore declare all properties as required and express optional fields as required-and-nullable rather than omitting them. Because strict mode forces the model to emit every property, the application prunes null values and empty collections from the model response before validation, so the persisted definition contains only fields the block type actually supports. `QuizDefinitionValidator` remains the authority after pruning. Schema fields with a closed value set (block type, question type, result mode, visibility operator, interview action) declare that set as an enum so decoding is constrained rather than free-form.
 
-Every synchronous provider invocation uses the Operational setting `operations.timeout_seconds` as its per-attempt request timeout instead of a hardcoded value. Quiz discovery, quiz-draft generation, and analysis all honor this setting. Administrator-facing generation runs inside the web request, so the application also raises the PHP execution limit for that request to the configured timeout multiplied by the number of chain entries, plus a fixed overhead allowance. Deployments must set web-server and PHP-FPM timeouts at least as high as that total; the required values are normative in `docs/SETUP.md`. When a draft fails, the administrator-facing notification reports the normalized per-provider failure or validator message rather than a generic failure string; secrets are never included.
+Every synchronous provider invocation uses the Operational setting `operations.timeout_seconds` as its per-attempt request timeout instead of a hardcoded value. Quiz discovery, quiz-draft generation, and analysis all honor this setting. Administrator-facing generation runs inside the web request, so the application also raises the PHP execution limit for that request to the configured timeout multiplied by the number of chain entries, plus a fixed overhead allowance. Raising that limit is best-effort: hosts that place `set_time_limit` in `disable_functions` are detected and skipped rather than allowed to fail the request. Deployments must therefore set web-server and PHP-FPM timeouts at least as high as that total; the required values are normative in `docs/SETUP.md`. When a draft fails, the administrator-facing notification reports the normalized per-provider failure or validator message rather than a generic failure string; secrets are never included.
 
 ### 12.4 Prompt-injection defense
 
@@ -655,6 +655,10 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-27 — Guard the execution-limit extension on restricted hosts
+
+- Hosts that place `set_time_limit` in `disable_functions` report it as undefined rather than disabled, which raised `Call to undefined function` and failed generation outright. The call is now guarded by a `function_exists` check, so those hosts fall back to their configured `max_execution_time` instead of erroring.
 
 ### 2026-08-27 — Interview composer sends on Enter
 

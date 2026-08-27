@@ -217,6 +217,8 @@ request_terminate_timeout = 180
 max_execution_time = 180
 ```
 
+Some managed hosts list `set_time_limit` in `disable_functions`. The application skips the call there, so `max_execution_time` in `php.ini` becomes the only limit that matters and must be raised to the full value above. Check with `php -i | grep disable_functions`.
+
 Reload after editing: `sudo systemctl reload php8.4-fpm nginx`. Lowering `operations.timeout_seconds` or shortening the chain reduces the required floor.
 
 ## 9. Other common environment settings
