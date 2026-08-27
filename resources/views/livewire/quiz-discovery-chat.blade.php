@@ -77,11 +77,12 @@
         <header class="quiz-chat__header">
             <div class="quiz-chat__identity">
                 <div class="quiz-chat__avatar">AI</div>
-                <div><p class="quiz-chat__title">Quiz assistant</p><p class="quiz-chat__subtitle">A focused conversation before creating a draft</p></div>
+                <div><p class="quiz-chat__title">Quiz assistant</p><p class="quiz-chat__subtitle">Chat to shape the quiz. Say create the quiz now when you are ready.</p></div>
             </div>
             @if ($sessionId !== null)
                 <div class="quiz-chat__header-actions">
                     <button class="quiz-chat__review" type="button" wire:click="startNewInterview">New interview</button>
+                    <button class="quiz-chat__review" type="button" wire:click="executeNow" wire:loading.attr="disabled">Create quiz now</button>
                     <button class="quiz-chat__review" type="button" wire:click="$toggle('showBrief')">{{ $showBrief ? 'Back to chat' : 'Review brief' }}</button>
                 </div>
             @endif
@@ -91,7 +92,7 @@
             @if ($showBrief)
                 <section class="quiz-chat__brief">
                     <h2>Review the quiz brief</h2>
-                    <p>Edit these details before creating the draft. The conversation itself is never passed directly into generation.</p>
+                    <p>Edit these details before creating the draft. The conversation itself is never passed directly into generation. You can also say create the quiz now from chat.</p>
                     <div class="quiz-chat__brief-editor">
                         <div class="quiz-chat__fields">
                             <div class="quiz-chat__field quiz-chat__field--wide"><label for="brief-context">Business context</label><textarea id="brief-context" wire:model="brief.business_context" rows="3"></textarea></div>
@@ -105,7 +106,7 @@
                     </div>
                 </section>
             @elseif ($sessionId === null)
-                <div class="quiz-chat__welcome"><h2>What quiz do you want to create?</h2><p>Tell me the rough idea. I will ask only what is needed to make a useful lead-generation quiz.</p></div>
+                <div class="quiz-chat__welcome"><h2>What quiz do you want to create?</h2><p>Tell me the rough idea. I will ask only what is needed, and you can say create the quiz now whenever you want a draft.</p></div>
             @else
                 @foreach ($this->session()?->messages ?? [] as $message)
                     <article class="quiz-chat__message quiz-chat__message--{{ $message->role === 'assistant' ? 'assistant' : 'user' }}"><div class="quiz-chat__bubble">@if ($message->role === 'assistant')<span class="quiz-chat__sender">Quiz assistant</span>@endif{{ $message->content }}</div></article>
@@ -134,7 +135,7 @@
                     x-on:keydown.enter.ctrl.prevent="send()"
                     rows="2"
                     aria-label="{{ $sessionId === null ? 'Describe the quiz you want to create' : 'Write your answer' }}"
-                    placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write a reply…' }}"
+                    placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write a reply, or say create the quiz now…' }}"
                 ></textarea>
                 <button class="quiz-chat__send" type="button" x-on:click="send()" x-bind:disabled="! draft.trim() || sending" aria-label="{{ $sessionId === null ? 'Start chat' : 'Send message' }}" title="{{ $sessionId === null ? 'Start chat' : 'Send message' }}">
                     <svg x-show="! sending" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 2.7 3 10.1c-.9.4-.9 1.7.1 2l7.1 2.3 2.3 7.1c.3 1 1.6 1 2 .1l7.4-18.5c.3-.7-.4-1.4-1.1-1.1ZM11.2 13.1l-1.4 5-1.2-3.7-3.7-1.2 12.9-5.1-6.7 5Z" /></svg>

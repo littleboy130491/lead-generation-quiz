@@ -46,7 +46,8 @@ Under **Operational settings → Admin submission notifications**, add one or mo
 
 Under **Operational settings**, administrators configure:
 
-- **Quiz creation system prompt** (`prompts.quiz_template`) — used when generating an AI quiz draft. Combined with fixed draft-only safety instructions and snapshotted per request with `prompts.quiz_version`.
+- **Quiz creation system prompt** (`prompts.quiz_template`) — used when the AI interview or `POST /api/v1/quizzes/generate` creates a quiz draft. Combined with fixed draft-only safety instructions, the V1 structured-output contract, and snapshotted per request with `prompts.quiz_version`.
+- **Quiz discovery interview system prompt** (`prompts.discovery_template`) — used by the guided AI interview. When the interview is complete or the administrator says to create the quiz now, generation uses the allowlisted brief and the quiz-creation prompt above.
 - **Analysis result system prompt** (`prompts.report_template`) — used when generating AI analysis/report results for a submission. Combined with fixed report-schema safety instructions and snapshotted per analysis with `prompts.report_version`. Optional variable: `{{questions_and_answers}}` (all questions and answers except those marked **Exclude from AI context** on the quiz). Per-question `{{question.ID}}` / `{{answer.ID}}` are not allowed here; use a quiz **AI system prompt** override instead.
 
 Provider credentials remain environment-only. Prompts are non-secret bounded text and must not contain PHP open tags.
@@ -75,11 +76,11 @@ OPENAI_COMPATIBLE_API_KEY=...
 OPENAI_COMPATIBLE_URL=https://your-gateway.example/v1
 ```
 
-The `provider` select must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`). **Custom (OpenAI-compatible)** stores provider `openai-compatible` with a required endpoint URL and uses `OPENAI_COMPATIBLE_API_KEY` from the environment. Entries without a usable key (or custom entries without a URL) are skipped. If the quiz chain has no usable credentials, Generate AI draft and `POST /api/v1/quizzes/generate` still produce a validated structural scaffold from the brief; only report/analysis generation requires usable report-chain credentials.
+The `provider` select must match a key under `config/ai.php` (for example `openai`, `anthropic`, `gemini`, `openrouter`). **Custom (OpenAI-compatible)** stores provider `openai-compatible` with a required endpoint URL and uses `OPENAI_COMPATIBLE_API_KEY` from the environment. Entries without a usable key (or custom entries without a URL) are skipped. If the quiz chain has no usable credentials, the AI quiz interview and `POST /api/v1/quizzes/generate` still produce a validated structural scaffold from the brief; only report/analysis generation requires usable report-chain credentials.
 
 ### Models
 
-Enter the model id your account supports (for example `gpt-4.1` for OpenAI). Quiz chain drives Generate AI draft; report chain drives submission analysis.
+Enter the model id your account supports (for example `gpt-4.1` for OpenAI). Quiz chain drives the AI quiz interview and `POST /api/v1/quizzes/generate`; report chain drives submission analysis.
 
 Full install path including Curator media token: [SETUP.md](SETUP.md).
 

@@ -17,6 +17,8 @@ class QuizDiscoveryChat extends Component
 {
     public ?int $sessionId = null;
 
+    public ?int $quizId = null;
+
     public string $opening = '';
 
     public string $reply = '';
@@ -30,7 +32,7 @@ class QuizDiscoveryChat extends Component
     {
         $session = QuizDiscoverySession::query()
             ->where('user_id', auth()->id())
-            ->where('status', 'interviewing')
+            ->whereIn('status', ['interviewing', 'ready'])
             ->latest('id')
             ->first();
 
@@ -54,6 +56,7 @@ class QuizDiscoveryChat extends Component
         $this->validate(['opening' => ['required', 'string', 'max:4000']]);
         $this->loadSession(app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening));
         $this->reset('opening');
+        $this->generateIfReady();
     }
 
     public function sendReply(?string $message = null): void
@@ -70,6 +73,12 @@ class QuizDiscoveryChat extends Component
 
         $this->loadSession(app(RunQuizDiscovery::class)->reply($session, $this->reply));
         $this->reset('reply');
+        $this->generateIfReady();
+    }
+
+    public function executeNow(): void
+    {
+        $this->generateDraft();
     }
 
     public function saveBrief(): void
@@ -87,26 +96,24 @@ class QuizDiscoveryChat extends Component
     public function generateDraft(): void
     {
         $session = $this->session();
-        $brief = QuizDiscoveryBrief::merge([], $this->brief);
-        if ($session === null || ! QuizDiscoveryBrief::isReady($brief)) {
-            Notification::make()->danger()->title('Complete the four core brief fields before generating.')->send();
+        $brief = QuizDiscoveryBrief::merge([], $this->brief ?: ($session?->brief ?? []));
+        if ($session === null || ! QuizDiscoveryBrief::hasEnoughContext($brief)) {
+            Notification::make()->danger()->title('Tell me a bit more about the quiz before I can create it.')->send();
 
             return;
         }
 
+        if ($session->status === 'generated') {
+            return;
+        }
+
         try {
-            $quiz = Quiz::query()->create([
-                'name' => Str::limit((string) $brief['objective'], 80, '') ?: 'AI discovery quiz',
-                'slug' => Str::lower(Str::random(12)),
-                'status' => QuizStatus::Draft,
-                'draft_definition' => ['schema_version' => 1, 'blocks' => []],
-                'settings' => [],
-                'created_by' => auth()->id(),
-            ]);
+            $quiz = $this->quizForGeneration($brief);
             app(GenerateQuizDraft::class)->handle($quiz, $brief);
             $session->update(['status' => 'generated', 'brief' => $brief]);
         } catch (\Throwable $exception) {
             report($exception);
+            $session->update(['status' => 'interviewing', 'brief' => $brief]);
             Notification::make()->danger()->title('Quiz draft generation could not be completed.')->send();
 
             return;
@@ -127,6 +134,43 @@ class QuizDiscoveryChat extends Component
             ->where('user_id', auth()->id())
             ->with('messages')
             ->first();
+    }
+
+    private function generateIfReady(): void
+    {
+        if ($this->session()?->status === 'ready') {
+            $this->generateDraft();
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $brief
+     */
+    private function quizForGeneration(array $brief): Quiz
+    {
+        if ($this->quizId !== null) {
+            $quiz = Quiz::query()->find($this->quizId);
+            if ($quiz === null) {
+                throw new \RuntimeException('The quiz for this interview could not be found.');
+            }
+
+            return $quiz;
+        }
+
+        $name = filled($brief['objective'] ?? null)
+            ? Str::limit((string) $brief['objective'], 80, '')
+            : (filled($brief['business_context'] ?? null)
+                ? Str::limit((string) $brief['business_context'], 80, '')
+                : 'AI discovery quiz');
+
+        return Quiz::query()->create([
+            'name' => $name !== '' ? $name : 'AI discovery quiz',
+            'slug' => Str::lower(Str::random(12)),
+            'status' => QuizStatus::Draft,
+            'draft_definition' => ['schema_version' => 1, 'blocks' => []],
+            'settings' => [],
+            'created_by' => auth()->id(),
+        ]);
     }
 
     private function loadSession(QuizDiscoverySession $session): void

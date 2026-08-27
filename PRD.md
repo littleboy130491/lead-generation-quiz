@@ -2,7 +2,7 @@
 
 **Status:** Initial approved baseline
 **Product phase:** Scaffold / pre-MVP implementation
-**Last updated:** 2026-08-26
+**Last updated:** 2026-08-27
 **Authority:** This document is the source of truth for product behavior and architecture.
 
 ## Document governance
@@ -41,7 +41,7 @@ Administrators use Filament to build and publish quizzes, review submissions, ge
 An authenticated operator who can:
 
 - Create, edit, preview, publish, archive, and duplicate quizzes.
-- Use AI to draft a quiz definition for review.
+- Use AI to draft a quiz definition for review through the AI interview chat.
 - Configure quiz behavior, design, report instructions, and email presentation.
 - View submission funnels and individual answer snapshots.
 - Generate, cancel, retry, and inspect analyses.
@@ -407,13 +407,15 @@ Concrete Laravel AI implementations translate application settings into SDK call
 
 ### 12.1 Quiz-definition AI
 
-The administrator supplies audience, objective, business context, desired insight, question count, and tone. Operational settings default `prompts.quiz_template` to the application-owned conversion-strategy instruction, which administrators may tailor. At the moment of each request, the application composes and snapshots that template with immutable safety instructions and an appended V1 output contract derived from the supported `QuizDefinitionValidator` fields: only a JSON object, required `schema_version`/ordered `blocks`, supported block/question types, option/score/visibility constraints, and no executable content. Administrators cannot remove the appended contract. The application snapshots the persisted `ai.quiz` chain and complete prompt with `prompts.quiz_version`, creates its append-only audit record, then invokes only those snapshots. Settings changes after request cannot alter that invocation. AI returns a structured proposed definition. The application validates schema, identifiers, options, page breaks, and conditions. The proposal remains a draft until an administrator reviews, previews, and publishes it; audit data is not embedded in the definition.
+The administrator creates AI-assisted quizzes through the **AI quiz interview** chat on quiz create, quiz edit, and **AI quiz discovery**. The interview collects audience, objective, business context, desired insight, optional question count, and tone. There is no separate brief-form **Generate AI draft** action in the admin panel. Operational settings default `prompts.quiz_template` to the application-owned conversion-strategy instruction, which administrators may tailor. At the moment of each generation request, the application composes and snapshots that template with immutable safety instructions and an appended V1 output contract derived from the supported `QuizDefinitionValidator` fields: only a JSON object, required `schema_version`/ordered `blocks`, supported block/question types, option/score/visibility constraints, and no executable content. Administrators cannot remove the appended contract. The Laravel AI invocation also receives a matching structured-output JSON schema so the model must return that V1 shape (`schema_version`, `result`, ordered `blocks`, and optional `opening` / `score_results` / `thank_you`). The application snapshots the persisted `ai.quiz` chain and complete prompt with `prompts.quiz_version`, creates its append-only audit record, then invokes only those snapshots. Settings changes after request cannot alter that invocation. AI returns a structured proposed definition. The application validates schema, identifiers, options, page breaks, and conditions. The proposal remains a draft until an administrator reviews, previews, and publishes it; audit data is not embedded in the definition.
 
-When no `ai.quiz` chain entry has a matching environment provider key, quiz-definition generation does **not** fail closed. The same `QuizDefinitionGenerator` path falls back to an application-owned structural scaffold built from the sanitized brief (stable IDs, supported question types, opening copy, `result.mode=ai`). Brief fields remain untrusted plain text and are never treated as instructions. The Generate AI draft header action remains available on quiz create and edit; when credentials are missing it explains that a structural scaffold will be used and still allows Confirm. Programmatic generation (`POST /api/v1/quizzes/generate` and `GenerateQuizDraft`) likewise returns a validated scaffold instead of `ai_unavailable`. Missing quiz AI credentials therefore must not block draft creation for administrators or server-to-server agents. Report/analysis generation is unchanged: it still raises `GenerationException` with `ai_unavailable` when the report chain has no usable credentials. When a quiz chain has usable credentials but every provider attempt fails, quiz generation raises `ai_generation_failed` (not the credential-missing path).
+When no `ai.quiz` chain entry has a matching environment provider key, quiz-definition generation does **not** fail closed. The same `QuizDefinitionGenerator` path falls back to an application-owned structural scaffold built from the sanitized brief (stable IDs, supported question types, opening copy, `result.mode=ai`). Brief fields remain untrusted plain text and are never treated as instructions. The interview remains available without credentials and still creates that scaffold when the interview is complete or the administrator instructs the assistant to create the quiz now. Programmatic generation (`POST /api/v1/quizzes/generate` and `GenerateQuizDraft`) likewise returns a validated scaffold instead of `ai_unavailable`. Missing quiz AI credentials therefore must not block draft creation for administrators or server-to-server agents. Report/analysis generation is unchanged: it still raises `GenerationException` with `ai_unavailable` when the report chain has no usable credentials. When a quiz chain has usable credentials but every provider attempt fails, quiz generation raises `ai_generation_failed` (not the credential-missing path).
 
 ### 12.1a AI quiz discovery interview
 
-Before creating a quiz draft, an administrator can open **AI quiz discovery** in the admin panel. The interview persists append-only user/assistant messages and a mutable, reviewed structured brief owned by the administrator. It asks one focused question at a time for missing business context, target audience, objective, and desired respondent insight; the administrator can edit the resulting brief directly. The interview uses the configured quiz AI provider/model chain when credentials are available and safely falls back to the same deterministic guided questions otherwise. Raw chat is untrusted reference material and is never supplied to `GenerateQuizDraft`; only the reviewed allowlisted brief is passed to generation after explicit confirmation. Each session snapshots the configurable discovery system prompt; generation retains its own immutable quiz-definition prompt/audit contract.
+Before creating a quiz draft, an administrator opens the **AI quiz interview** chat (from quiz create, quiz edit, or **AI quiz discovery**). The interview persists append-only user/assistant messages and a mutable, reviewed structured brief owned by the administrator. It asks one focused question at a time for missing business context, target audience, objective, and desired respondent insight; the administrator can still edit the resulting brief directly. The interview uses the configured quiz AI provider/model chain when credentials are available and safely falls back to the same deterministic guided questions otherwise.
+
+Each interviewer turn is schema-constrained to a chat `message`, allowlisted `brief` fields, and `action` of `continue` or `generate`. The interviewer must not emit quiz JSON in the chat. When the core brief is complete, or when the administrator instructs the assistant to execute/create/generate the quiz now (chat command or **Create quiz now**), the application invokes `GenerateQuizDraft` with the allowlisted brief. Immediate generation requires at least `business_context` or `objective`; it does not require every optional brief field. Raw chat remains untrusted reference material and is never supplied to `GenerateQuizDraft`; only the derived allowlisted brief is passed. Generation uses the immutable V1 quiz-definition prompt, structured-output schema, validator, and audit contract. On quiz edit, a completed interview updates that quiz's mutable draft; otherwise it creates a new draft. Each session snapshots the configurable discovery system prompt plus the application-owned turn contract.
 
 ### 12.1a Server-to-server quiz-generation API
 
@@ -561,7 +563,7 @@ Future policy modes are reserved as:
 - Branding & design and Report email templates are single full-width columns (`Width::Full`, form `columns(1)`) so fields use the available panel width rather than Filament's default two-column, 7xl-capped form.
 - Structured design tokens and additional CSS on Branding & design.
 - Email templates on Report email templates.
-- Operational settings as a Filament form: ordered quiz/report provider/model repeaters; AI system prompts for quiz creation (`prompts.quiz_template`) and analysis results (`prompts.report_template`, optional `{{questions_and_answers}}`) with version labels; Turnstile/analysis mode; resume/retention/retry/timeout numeric fields; and one or more admin notification email addresses for completed submissions. Administrators do not edit these as raw JSON.
+- Operational settings as a Filament form: ordered quiz/report provider/model repeaters; AI system prompts for quiz creation (`prompts.quiz_template`), the discovery interview (`prompts.discovery_template`), and analysis results (`prompts.report_template`, optional `{{questions_and_answers}}`) with version labels; Turnstile/analysis mode; resume/retention/retry/timeout numeric fields; and one or more admin notification email addresses for completed submissions. Administrators do not edit these as raw JSON.
 - Separate system prompts/provider chains for quiz creation and report generation.
 
 Provider keys are not displayed or stored in ordinary settings.
@@ -645,6 +647,13 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-27 — AI interview is the only admin quiz-creation assistant
+
+- Removed the brief-form **Generate AI draft** header action from quiz create and edit. Administrators create AI-assisted drafts only through the **AI quiz interview** chat (create, edit, or AI quiz discovery).
+- When the interview is complete, or the administrator says to execute/create/generate the quiz now (or uses **Create quiz now**), the application generates from the allowlisted brief. Immediate generation needs `business_context` or `objective`, not every optional field. Execute-now commands are not stored as brief answers.
+- The interview turn schema now includes `action` (`continue` | `generate`). Quiz-definition generation uses a structured-output JSON schema matching the V1 validator contract, not a generic `blocks` object list.
+- On edit, a finished interview updates that quiz's draft. The server-to-server generation API still accepts a structured brief.
 
 ### 2026-08-26 — Provider select with custom endpoint URL
 

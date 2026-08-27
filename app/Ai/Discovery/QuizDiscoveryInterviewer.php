@@ -7,7 +7,7 @@ interface QuizDiscoveryInterviewer
     /**
      * @param  array<string, mixed>  $brief
      * @param  list<array{role: string, content: string}>  $messages
-     * @return array{message: string, brief: array<string, int|string>}
+     * @return array{message: string, brief: array<string, int|string>, action: 'continue'|'generate'}
      */
     public function respond(array $brief, array $messages, string $systemPrompt): array;
 }
