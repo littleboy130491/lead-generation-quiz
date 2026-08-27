@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\Quizzes\Pages;
 
 use App\Actions\Quizzes\PublishQuizRevision;
-use App\Filament\Resources\Quizzes\Concerns\HasGenerateQuizDraftAction;
+use App\Filament\Resources\Quizzes\Concerns\HasQuizDiscoveryAction;
 use App\Filament\Resources\Quizzes\QuizResource;
 use App\Filament\Resources\Quizzes\Schemas\QuizForm;
 use Filament\Actions\Action;
@@ -15,7 +15,7 @@ use Filament\Support\Enums\Width;
 
 class EditQuiz extends EditRecord
 {
-    use HasGenerateQuizDraftAction;
+    use HasQuizDiscoveryAction;
 
     protected static string $resource = QuizResource::class;
 
@@ -39,6 +39,11 @@ class EditQuiz extends EditRecord
         return $data;
     }
 
+    protected function quizDiscoveryQuizId(): ?int
+    {
+        return $this->getRecord()->id;
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -46,7 +51,6 @@ class EditQuiz extends EditRecord
                 ->label('Preview')
                 ->url(fn (): string => route('quizzes.show', $this->getRecord()), shouldOpenInNewTab: true),
             $this->quizDiscoveryAction(),
-            $this->generateQuizDraftAction(),
             Action::make('publish')->requiresConfirmation()->action(fn () => app(PublishQuizRevision::class)->handle($this->getRecord(), auth()->id())),
             DeleteAction::make(),
             ForceDeleteAction::make(),

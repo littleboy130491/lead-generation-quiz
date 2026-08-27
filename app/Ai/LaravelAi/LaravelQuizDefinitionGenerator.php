@@ -4,6 +4,7 @@ namespace App\Ai\LaravelAi;
 
 use App\Ai\ConfiguredAiProviders;
 use App\Ai\Contracts\QuizDefinitionGenerator;
+use App\Ai\Data\QuizDefinitionJsonSchema;
 use App\Ai\GenerationException;
 use App\Ai\HeuristicQuizDefinitionGenerator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -29,7 +30,7 @@ class LaravelQuizDefinitionGenerator implements QuizDefinitionGenerator
                 $this->configured->applyRuntimeConfig($entry);
                 $response = \Laravel\Ai\agent(
                     instructions: $systemPrompt,
-                    schema: fn (JsonSchema $schema) => ['schema_version' => $schema->integer()->required(), 'blocks' => $schema->array()->items($schema->object())->required()],
+                    schema: fn (JsonSchema $schema) => QuizDefinitionJsonSchema::definition($schema),
                 )->prompt('<untrusted_administrator_brief>'.json_encode($brief, JSON_THROW_ON_ERROR).'</untrusted_administrator_brief>', provider: Lab::from($entry['provider']), model: $entry['model'], timeout: 60);
 
                 return $response->toArray();

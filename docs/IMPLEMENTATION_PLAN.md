@@ -380,13 +380,13 @@ System instructions must specify:
 
 ### 6.3 AI discovery interview
 
-Provide an authenticated Filament page that records a bounded interviewer conversation, derives only the allowlisted structured brief fields, shows them for administrator review/editing, and requires explicit generation confirmation. Use the configured quiz chain for a schema-constrained next question when credentials exist; retain a deterministic guided fallback so discovery remains usable without credentials. Do not send the raw transcript to quiz generation.
+Provide an authenticated Filament page and quiz create/edit modal that record a bounded interviewer conversation, derive only the allowlisted structured brief fields, and show them for optional administrator review/editing. The interview chat is the only administrator AI quiz-creation UI. Each turn is schema-constrained to a chat message, allowlisted brief fields, and `action` continue or generate. When the core brief is complete, or the administrator instructs the assistant to execute/create/generate now, invoke `GenerateQuizDraft` without requiring a separate brief form. Immediate generation needs at least business context or objective. Use the configured quiz chain when credentials exist; retain a deterministic guided fallback so discovery remains usable without credentials. Do not send the raw transcript to quiz generation. Do not emit quiz JSON in the chat message.
 
 ### 6.4 Admin generation flow
 
-Filament action collects business context, target audience, objective, desired insight, count, and tone. When the persisted `ai.quiz` chain has no usable environment credentials, generation falls back to a validated structural scaffold from the sanitized brief (admin Confirm stays enabled; API succeeds the same way). When credentials exist, use the provider chain; if every attempt fails, raise `ai_generation_failed`. Generation runs in a queue if response time can exceed a normal admin request. Validate returned definition and present a diff/preview before applying it to the draft.
+Administrator generation is triggered from the interview (`action=generate`, an execute-now command, or **Create quiz now**). The server-to-server API still accepts the structured brief directly. When the persisted `ai.quiz` chain has no usable environment credentials, generation falls back to a validated structural scaffold from the sanitized brief. When credentials exist, use the provider chain with a V1 structured-output JSON schema matching `QuizDefinitionValidator` (schema_version, result, blocks, optional opening/score_results/thank_you); if every attempt fails, raise `ai_generation_failed`. Validate returned definition before applying it to the mutable draft.
 
-Tests fake the Laravel AI SDK and prove invalid output cannot overwrite a draft.
+Tests fake the Laravel AI SDK and prove invalid output cannot overwrite a draft. Feature tests cover execute-now, completed interviews, and interview-only create/edit headers.
 
 ## 10. Phase 7 — AI report pipeline
 

@@ -19,5 +19,18 @@ class QuizDiscoveryBriefTest extends TestCase
         $this->assertSame('Identify their current business bottleneck', $brief['objective']);
         $this->assertArrayNotHasKey('unexpected', $brief);
         $this->assertSame('target_audience', QuizDiscoveryBrief::nextMissingField($brief));
+        $this->assertTrue(QuizDiscoveryBrief::hasEnoughContext($brief));
+        $this->assertFalse(QuizDiscoveryBrief::isReady($brief));
+    }
+
+    public function test_opening_context_alone_is_enough_to_generate_on_execute_now(): void
+    {
+        $brief = QuizDiscoveryBrief::merge([], [
+            'business_context' => 'A consulting quiz for operations leaders',
+        ]);
+
+        $this->assertTrue(QuizDiscoveryBrief::hasEnoughContext($brief));
+        $this->assertFalse(QuizDiscoveryBrief::isReady($brief));
+        $this->assertFalse(QuizDiscoveryBrief::hasEnoughContext([]));
     }
 }

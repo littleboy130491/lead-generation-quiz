@@ -48,7 +48,7 @@ final class QuizDiscoveryBrief
     /** @param array<string, mixed> $brief */
     public static function nextMissingField(array $brief): ?string
     {
-        foreach (['objective', 'target_audience', 'business_context', 'desired_insight'] as $field) {
+        foreach (['business_context', 'objective', 'target_audience', 'desired_insight'] as $field) {
             if (blank($brief[$field] ?? null)) {
                 return $field;
             }
@@ -61,5 +61,11 @@ final class QuizDiscoveryBrief
     public static function isReady(array $brief): bool
     {
         return self::nextMissingField($brief) === null;
+    }
+
+    /** @param array<string, mixed> $brief */
+    public static function hasEnoughContext(array $brief): bool
+    {
+        return filled($brief['business_context'] ?? null) || filled($brief['objective'] ?? null);
     }
 }
