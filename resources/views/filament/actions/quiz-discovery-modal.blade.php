@@ -1,1 +1,1 @@
-<livewire:quiz-discovery-chat />
+<livewire:quiz-discovery-chat :quiz-id="$quizId" />

@@ -4,17 +4,22 @@ namespace App\Livewire;
 
 use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Actions\Quizzes\RunQuizDiscovery;
+use App\Ai\ConfiguredAiProviders;
 use App\Ai\Discovery\QuizDiscoveryBrief;
+use App\Ai\GenerationException;
 use App\Enums\QuizStatus;
 use App\Filament\Resources\Quizzes\Pages\EditQuiz;
 use App\Models\Quiz;
 use App\Models\QuizDiscoverySession;
+use App\Settings\ApplicationSettings;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
 class QuizDiscoveryChat extends Component
 {
+    public ?int $quizId = null;
+
     public ?int $sessionId = null;
 
     public string $opening = '';
@@ -26,8 +31,10 @@ class QuizDiscoveryChat extends Component
     /** @var array<string, mixed> */
     public array $brief = [];
 
-    public function mount(): void
+    public function mount(?int $quizId = null): void
     {
+        $this->quizId = $quizId;
+
         $session = QuizDiscoverySession::query()
             ->where('user_id', auth()->id())
             ->where('status', 'interviewing')
@@ -52,7 +59,7 @@ class QuizDiscoveryChat extends Component
         }
 
         $this->validate(['opening' => ['required', 'string', 'max:4000']]);
-        $this->loadSession(app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening));
+        $this->handleDiscoveryResult(app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening));
         $this->reset('opening');
     }
 
@@ -68,7 +75,7 @@ class QuizDiscoveryChat extends Component
             return;
         }
 
-        $this->loadSession(app(RunQuizDiscovery::class)->reply($session, $this->reply));
+        $this->handleDiscoveryResult(app(RunQuizDiscovery::class)->reply($session, $this->reply));
         $this->reset('reply');
     }
 
@@ -95,22 +102,27 @@ class QuizDiscoveryChat extends Component
         }
 
         try {
-            $quiz = Quiz::query()->create([
-                'name' => Str::limit((string) $brief['objective'], 80, '') ?: 'AI discovery quiz',
-                'slug' => Str::lower(Str::random(12)),
-                'status' => QuizStatus::Draft,
-                'draft_definition' => ['schema_version' => 1, 'blocks' => []],
-                'settings' => [],
-                'created_by' => auth()->id(),
-            ]);
+            $quiz = $this->resolveQuizForGeneration($brief);
             app(GenerateQuizDraft::class)->handle($quiz, $brief);
             $session->update(['status' => 'generated', 'brief' => $brief]);
+        } catch (GenerationException $exception) {
+            Notification::make()->danger()->title($exception->getMessage())->send();
+
+            return;
         } catch (\Throwable $exception) {
             report($exception);
             Notification::make()->danger()->title('Quiz draft generation could not be completed.')->send();
 
             return;
         }
+
+        $usedAi = app(ConfiguredAiProviders::class)->hasUsableCredentials(
+            app(ApplicationSettings::class)->get('ai.quiz')
+        );
+
+        Notification::make()->success()->title(
+            $usedAi ? 'AI draft generated.' : 'Structural draft generated.'
+        )->send();
 
         $this->redirect(EditQuiz::getUrl(['record' => $quiz]));
     }
@@ -127,6 +139,46 @@ class QuizDiscoveryChat extends Component
             ->where('user_id', auth()->id())
             ->with('messages')
             ->first();
+    }
+
+    /**
+     * @param  array{session: QuizDiscoverySession, ready_to_generate: bool, execute_now: bool}  $result
+     */
+    private function handleDiscoveryResult(array $result): void
+    {
+        $this->loadSession($result['session']);
+
+        if (! $result['ready_to_generate']) {
+            return;
+        }
+
+        $this->showBrief = true;
+
+        if ($result['execute_now'] && QuizDiscoveryBrief::isReady($this->brief)) {
+            $this->generateDraft();
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $brief
+     */
+    private function resolveQuizForGeneration(array $brief): Quiz
+    {
+        if ($this->quizId !== null) {
+            $quiz = Quiz::query()->find($this->quizId);
+            if ($quiz !== null) {
+                return $quiz;
+            }
+        }
+
+        return Quiz::query()->create([
+            'name' => Str::limit((string) $brief['objective'], 80, '') ?: 'AI discovery quiz',
+            'slug' => Str::lower(Str::random(12)),
+            'status' => QuizStatus::Draft,
+            'draft_definition' => ['schema_version' => 1, 'blocks' => []],
+            'settings' => [],
+            'created_by' => auth()->id(),
+        ]);
     }
 
     private function loadSession(QuizDiscoverySession $session): void

@@ -98,9 +98,9 @@ class OperationalSettings extends Page
                     TextInput::make('prompts.discovery_version')->label('Discovery prompt version')->required()->maxLength(60)->regex('/^[a-z0-9._-]{1,60}$/i')
                         ->helperText('Label snapshotted with each AI quiz-discovery interview.'),
                     Textarea::make('prompts.discovery_template')->label('Quiz discovery interview system prompt')->rows(10)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()
-                        ->helperText('Instructions used by the guided AI interview before a quiz draft is generated. The reviewed brief, not raw chat text, is used for generation.'),
+                        ->helperText('Instructions used by the AI quiz interview before a quiz draft is generated. The reviewed brief, not raw chat text, is used for generation.'),
                     Textarea::make('prompts.quiz_template')->label('Quiz creation system prompt')->rows(12)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()
-                        ->helperText('Instructions used when Generate AI draft creates a quiz definition. Combined with built-in draft-only safety rules.'),
+                        ->helperText('Instructions used when the AI quiz interview creates a quiz definition from the reviewed brief. Combined with built-in draft-only safety rules.'),
                     Textarea::make('prompts.report_template')->label('Analysis result system prompt')->rows(12)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()
                         ->helperText('Instructions used when AI generates analysis/report results. Combined with built-in report schema and safety rules. Optional variable: {{questions_and_answers}} (all questions/answers except those marked Exclude from AI context). Per-question {{question.ID}} / {{answer.ID}} are only available on a quiz’s own AI system prompt override.'),
                 ])->columns(2),

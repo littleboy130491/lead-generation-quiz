@@ -15,7 +15,10 @@ class RunQuizDiscovery
         private ApplicationSettings $settings,
     ) {}
 
-    public function start(int $userId, string $opening): QuizDiscoverySession
+    /**
+     * @return array{session: QuizDiscoverySession, ready_to_generate: bool, execute_now: bool}
+     */
+    public function start(int $userId, string $opening): array
     {
         $prompts = $this->settings->get('prompts');
         $session = QuizDiscoverySession::create([
@@ -28,13 +31,21 @@ class RunQuizDiscovery
         return $this->reply($session, $opening, 'business_context');
     }
 
-    public function reply(QuizDiscoverySession $session, string $message, ?string $briefField = null): QuizDiscoverySession
+    /**
+     * @return array{session: QuizDiscoverySession, ready_to_generate: bool, execute_now: bool}
+     */
+    public function reply(QuizDiscoverySession $session, string $message, ?string $briefField = null): array
     {
         $message = trim(strip_tags($message));
         if ($message === '') {
-            return $session->fresh(['messages']) ?? $session;
+            return [
+                'session' => $session->fresh(['messages']) ?? $session,
+                'ready_to_generate' => QuizDiscoveryBrief::isReady($session->brief ?? []),
+                'execute_now' => false,
+            ];
         }
 
+        $executeNow = QuizDiscoveryBrief::wantsToExecute($message);
         $session->messages()->create(['role' => 'user', 'content' => mb_substr($message, 0, 4000)]);
         $brief = QuizDiscoveryBrief::merge($session->brief ?? [], [
             $briefField ?? QuizDiscoveryBrief::nextMissingField($session->brief ?? []) ?? 'business_context' => $message,
@@ -42,6 +53,7 @@ class RunQuizDiscovery
         $history = $session->messages()->orderBy('id')->get(['role', 'content'])->map(fn ($item) => $item->only(['role', 'content']))->all();
         $response = $this->interviewer->respond($brief, $history, $session->system_prompt_snapshot);
         $brief = QuizDiscoveryBrief::merge($brief, $response['brief']);
+        $readyToGenerate = (bool) ($response['ready_to_generate'] ?? false) && QuizDiscoveryBrief::isReady($brief);
 
         $session->update(['brief' => $brief]);
         $session->messages()->create([
@@ -50,6 +62,10 @@ class RunQuizDiscovery
             'brief_snapshot' => $brief,
         ]);
 
-        return $session->fresh(['messages']) ?? $session;
+        return [
+            'session' => $session->fresh(['messages']) ?? $session,
+            'ready_to_generate' => $readyToGenerate,
+            'execute_now' => $executeNow,
+        ];
     }
 }

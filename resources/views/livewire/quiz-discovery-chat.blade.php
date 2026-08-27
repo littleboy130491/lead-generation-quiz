@@ -101,11 +101,11 @@
                             <div class="quiz-chat__field"><label for="brief-count">Number of questions</label><input id="brief-count" type="number" min="1" max="30" wire:model="brief.question_count" /></div>
                             <div class="quiz-chat__field"><label for="brief-tone">Tone</label><input id="brief-tone" wire:model="brief.tone" /></div>
                         </div>
-                        <div class="quiz-chat__actions"><button class="quiz-chat__action-button quiz-chat__save" type="button" wire:click="saveBrief" wire:loading.attr="disabled">Save changes</button><button class="quiz-chat__action-button" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Generate draft</button></div>
+                        <div class="quiz-chat__actions"><button class="quiz-chat__action-button quiz-chat__save" type="button" wire:click="saveBrief" wire:loading.attr="disabled">Save changes</button><button class="quiz-chat__action-button" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Create quiz draft</button></div>
                     </div>
                 </section>
             @elseif ($sessionId === null)
-                <div class="quiz-chat__welcome"><h2>What quiz do you want to create?</h2><p>Tell me the rough idea. I will ask only what is needed to make a useful lead-generation quiz.</p></div>
+                <div class="quiz-chat__welcome"><h2>What quiz do you want to create?</h2><p>Tell me the rough idea. I will ask only what is needed, structure a reviewable brief, and create an editable draft when you say <strong>execute now</strong> or confirm in Review brief.</p></div>
             @else
                 @foreach ($this->session()?->messages ?? [] as $message)
                     <article class="quiz-chat__message quiz-chat__message--{{ $message->role === 'assistant' ? 'assistant' : 'user' }}"><div class="quiz-chat__bubble">@if ($message->role === 'assistant')<span class="quiz-chat__sender">Quiz assistant</span>@endif{{ $message->content }}</div></article>

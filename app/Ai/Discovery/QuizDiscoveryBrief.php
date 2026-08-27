@@ -62,4 +62,18 @@ final class QuizDiscoveryBrief
     {
         return self::nextMissingField($brief) === null;
     }
+
+    public static function wantsToExecute(string $message): bool
+    {
+        $normalized = mb_strtolower(trim($message));
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/\b(?:execute(?:\s+now)?|generate(?:\s+(?:the\s+)?(?:quiz|draft))?|create(?:\s+(?:the\s+)?(?:quiz|draft))?|finish(?:\s+now)?|go\s+ahead|proceed(?:\s+now)?|ready\s+to\s+generate|start\s+generat(?:e|ing)|make\s+(?:the\s+)?quiz)\b/u',
+            $normalized,
+        );
+    }
 }

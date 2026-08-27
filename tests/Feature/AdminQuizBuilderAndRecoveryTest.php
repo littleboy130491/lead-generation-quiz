@@ -38,7 +38,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
             ->get('/admin/quizzes/create')
             ->assertOk()
             ->assertSee('AI quiz interview')
-            ->assertSee('Generate AI draft')
+            ->assertDontSee('Generate AI draft')
             ->assertSee('Settings')
             ->assertSee('Result')
             ->assertSee('Thank you')
@@ -65,7 +65,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
             ->get("/admin/quizzes/{$quiz->id}/edit")
             ->assertOk()
             ->assertSee('AI quiz interview')
-            ->assertSee('Generate AI draft')
+            ->assertDontSee('Generate AI draft')
             ->assertSee('Settings')
             ->assertSee('Quiz')
             ->assertSee('Result')
@@ -75,7 +75,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
             ->assertDontSee('fi-width-7xl', false);
     }
 
-    public function test_generate_ai_draft_modal_allows_scaffold_when_provider_credentials_are_missing(): void
+    public function test_ai_quiz_interview_modal_is_available_when_provider_credentials_are_missing(): void
     {
         config(['ai.providers.openai.key' => null]);
         app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
@@ -84,16 +84,15 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $page = Livewire::actingAs(User::factory()->create())
             ->test(EditQuiz::class, ['record' => $quiz->id])
             ->assertSee('AI quiz interview')
-            ->assertSee('Generate AI draft')
-            ->mountAction('generateDraft');
+            ->assertDontSee('Generate AI draft')
+            ->mountAction('quizDiscovery');
 
         $action = $page->instance()->getMountedAction();
         $this->assertNotNull($action);
-        $this->assertStringContainsString('structural draft', (string) $action->getModalDescription());
-        $this->assertFalse($action->isDisabled());
+        $this->assertStringContainsString('execute now', (string) $action->getModalDescription());
     }
 
-    public function test_generate_ai_draft_header_is_visible_on_create_when_provider_credentials_are_missing(): void
+    public function test_ai_quiz_interview_header_is_visible_on_create_when_provider_credentials_are_missing(): void
     {
         config(['ai.providers.openai.key' => null]);
         app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
@@ -101,16 +100,15 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $page = Livewire::actingAs(User::factory()->create())
             ->test(CreateQuiz::class)
             ->assertSee('AI quiz interview')
-            ->assertSee('Generate AI draft')
-            ->mountAction('generateDraft');
+            ->assertDontSee('Generate AI draft')
+            ->mountAction('quizDiscovery');
 
         $action = $page->instance()->getMountedAction();
         $this->assertNotNull($action);
-        $this->assertStringContainsString('structural draft', (string) $action->getModalDescription());
-        $this->assertFalse($action->isDisabled());
+        $this->assertStringContainsString('execute now', (string) $action->getModalDescription());
     }
 
-    public function test_generate_ai_draft_modal_omits_scaffold_notice_when_provider_credentials_are_configured(): void
+    public function test_ai_quiz_interview_modal_is_available_when_provider_credentials_are_configured(): void
     {
         config(['ai.providers.openai.key' => 'sk-test']);
         app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-test']]);
@@ -118,11 +116,11 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $page = Livewire::actingAs(User::factory()->create())
             ->test(EditQuiz::class, ['record' => $quiz->id])
-            ->mountAction('generateDraft');
+            ->mountAction('quizDiscovery');
 
         $action = $page->instance()->getMountedAction();
         $this->assertNotNull($action);
-        $this->assertStringNotContainsString('structural draft', (string) $action->getModalDescription());
+        $this->assertStringContainsString('execute now', (string) $action->getModalDescription());
     }
 
     public function test_authenticated_administrator_can_open_preview_and_revision_history_surfaces(): void
