@@ -21,6 +21,7 @@ use App\Models\QuizRevision;
 use App\Models\ReportDelivery;
 use App\Models\Submission;
 use App\Models\User;
+use App\Settings\ApplicationSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Hash;
@@ -76,6 +77,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
     public function test_create_and_edit_quiz_headers_offer_the_interview_instead_of_a_brief_form(): void
     {
+        $this->configureQuizAiProvider();
         $quiz = Quiz::factory()->create();
 
         $create = Livewire::actingAs(User::factory()->create())
@@ -95,6 +97,29 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $this->assertNotNull($edit->instance()->getMountedAction());
         $this->assertStringContainsString('create the quiz now', (string) $edit->instance()->getMountedAction()->getModalDescription());
+    }
+
+    public function test_quiz_interview_action_is_disabled_without_configured_quiz_ai_credentials(): void
+    {
+        config(['ai.providers.openai.key' => null]);
+        app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-5']]);
+
+        $create = Livewire::actingAs(User::factory()->create())->test(CreateQuiz::class);
+        $action = $create->instance()->getAction('quizDiscovery');
+
+        $this->assertTrue($action->isDisabled());
+        $this->assertStringContainsString('Operational settings', (string) $action->getTooltip());
+
+        $this->configureQuizAiProvider();
+
+        $enabled = Livewire::actingAs(User::factory()->create())->test(CreateQuiz::class);
+        $this->assertFalse($enabled->instance()->getAction('quizDiscovery')->isDisabled());
+    }
+
+    private function configureQuizAiProvider(): void
+    {
+        config(['ai.providers.openai.key' => 'sk-test']);
+        app(ApplicationSettings::class)->put('ai.quiz', [['provider' => 'openai', 'model' => 'gpt-5']]);
     }
 
     public function test_authenticated_administrator_can_open_preview_and_revision_history_surfaces(): void

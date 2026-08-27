@@ -2,15 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Actions\Quizzes\RunQuizDiscovery;
+use App\Ai\Contracts\QuizDefinitionGenerator;
 use App\Ai\Discovery\LaravelQuizDiscoveryInterviewer;
 use App\Ai\Discovery\QuizDiscoveryInterviewer;
-use App\Filament\Resources\Quizzes\Pages\EditQuiz;
+use App\Ai\GenerationException;
+use App\Enums\QuizDiscoveryStatus;
+use App\Jobs\GenerateQuizDraftJob;
 use App\Livewire\QuizDiscoveryChat;
 use App\Models\Quiz;
 use App\Models\QuizDiscoverySession;
+use App\Models\QuizDraftGeneration;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -31,7 +37,7 @@ class QuizDiscoveryTest extends TestCase
             '<b>I need a lead quiz</b> for my consulting business.',
         );
 
-        $this->assertSame('interviewing', $session->status);
+        $this->assertSame(QuizDiscoveryStatus::Interviewing, $session->status);
         $this->assertSame('I need a lead quiz for my consulting business.', $session->brief['business_context']);
         $this->assertSame(['user', 'assistant'], $session->messages()->pluck('role')->all());
         $this->assertStringContainsString('outcome', $session->messages()->latest('id')->value('content'));
@@ -60,14 +66,27 @@ class QuizDiscoveryTest extends TestCase
 
     public function test_execute_now_marks_the_interview_ready_without_storing_the_command_as_a_brief_field(): void
     {
+        $interviewer = new class implements QuizDiscoveryInterviewer
+        {
+            public int $calls = 0;
+
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                $this->calls++;
+
+                return ['message' => 'What outcome should the quiz create?', 'brief' => [], 'action' => 'continue'];
+            }
+        };
+        $this->swap(QuizDiscoveryInterviewer::class, $interviewer);
         $user = User::factory()->create();
         $session = app(RunQuizDiscovery::class)->start($user->id, 'A consulting quiz for operations leaders.');
         $session = app(RunQuizDiscovery::class)->reply($session, 'execute now');
 
-        $this->assertSame('ready', $session->status);
+        $this->assertSame(QuizDiscoveryStatus::Ready, $session->status);
+        $this->assertSame(1, $interviewer->calls, 'The explicit command must bypass a redundant interviewer call.');
         $this->assertSame('A consulting quiz for operations leaders.', $session->brief['business_context']);
         $this->assertNotSame('execute now', $session->brief['objective'] ?? null);
-        $this->assertStringContainsString('Generating the quiz now', $session->messages()->latest('id')->value('content'));
+        $this->assertStringContainsString('generat', strtolower($session->messages()->latest('id')->value('content')));
     }
 
     public function test_completing_the_guided_interview_marks_the_session_ready_to_generate(): void
@@ -80,7 +99,7 @@ class QuizDiscoveryTest extends TestCase
         $session = app(RunQuizDiscovery::class)->reply($session, 'Owners of 10-50 person firms');
         $session = app(RunQuizDiscovery::class)->reply($session, 'The next operational action');
 
-        $this->assertSame('ready', $session->status);
+        $this->assertSame(QuizDiscoveryStatus::Ready, $session->status);
         $this->assertSame('Consulting firm quiz', $session->brief['business_context']);
         $this->assertSame('Help owners find bottlenecks', $session->brief['objective']);
         $this->assertSame('Owners of 10-50 person firms', $session->brief['target_audience']);
@@ -108,7 +127,7 @@ class QuizDiscoveryTest extends TestCase
 
         $session = app(RunQuizDiscovery::class)->start(User::factory()->create()->id, 'A dating coaching quiz');
 
-        $this->assertSame('ready', $session->status);
+        $this->assertSame(QuizDiscoveryStatus::Ready, $session->status);
         $this->assertSame(RunQuizDiscovery::READY_MESSAGE, $session->messages()->latest('id')->value('content'));
     }
 
@@ -157,8 +176,9 @@ class QuizDiscoveryTest extends TestCase
         $this->assertSame($before, $session->fresh()->messages()->count());
     }
 
-    public function test_chat_execute_now_creates_a_validated_quiz_draft(): void
+    public function test_chat_execute_now_queues_generation_and_returns_the_generating_state(): void
     {
+        Bus::fake();
         $user = User::factory()->create();
 
         $component = Livewire::actingAs($user)
@@ -167,32 +187,77 @@ class QuizDiscoveryTest extends TestCase
             ->call('sendReply', 'execute now');
 
         $quiz = Quiz::query()->sole();
-        $component->assertRedirect(EditQuiz::getUrl(['record' => $quiz]));
-        $this->assertSame('generated', QuizDiscoverySession::query()->sole()->status);
-        $this->assertNotEmpty($quiz->draft_definition['blocks']);
-        $this->assertSame(1, $quiz->draft_definition['schema_version']);
-        $this->assertSame('A consulting quiz for operations leaders.', QuizDiscoverySession::query()->sole()->brief['business_context']);
+        $session = QuizDiscoverySession::query()->sole();
+
+        $this->assertSame(QuizDiscoveryStatus::Generating, $session->status);
+        $this->assertSame($quiz->id, $session->quiz_id);
+        $this->assertEmpty($quiz->draft_definition['blocks']);
+        $this->assertSame('A consulting quiz for operations leaders.', $session->brief['business_context']);
+        $component->assertSee('Generating your quiz draft');
+        Bus::assertDispatched(GenerateQuizDraftJob::class, fn (GenerateQuizDraftJob $job): bool => $job->sessionId === $session->id && $job->queue === 'ai');
     }
 
-    public function test_completing_the_chat_interview_creates_a_quiz_draft(): void
+    public function test_generation_job_completes_the_chat_and_is_idempotent(): void
     {
+        Bus::fake();
         $user = User::factory()->create();
 
-        Livewire::actingAs($user)
+        $component = Livewire::actingAs($user)
             ->test(QuizDiscoveryChat::class)
-            ->call('startDiscovery', 'Consulting firm quiz')
-            ->call('sendReply', 'Help owners find bottlenecks')
-            ->call('sendReply', 'Owners of 10-50 person firms')
-            ->call('sendReply', 'The next operational action')
-            ->assertRedirect();
+            ->call('startDiscovery', 'Consulting firm quiz for operations leaders')
+            ->call('sendReply', 'execute now');
 
-        $this->assertSame('generated', QuizDiscoverySession::query()->sole()->status);
+        $session = QuizDiscoverySession::query()->sole();
+        $job = new GenerateQuizDraftJob($session->id);
+        $job->handle(app(GenerateQuizDraft::class));
+        $generationCount = QuizDraftGeneration::query()->count();
+        $messageCount = $session->messages()->count();
+
+        $job->handle(app(GenerateQuizDraft::class));
+        $component->call('pollGeneration');
+
+        $this->assertSame(QuizDiscoveryStatus::Generated, $session->fresh()->status);
         $this->assertSame(1, Quiz::query()->count());
         $this->assertNotEmpty(Quiz::query()->sole()->draft_definition['blocks']);
+        $this->assertSame($generationCount, QuizDraftGeneration::query()->count());
+        $this->assertSame($messageCount, $session->messages()->count());
+        $component->assertSee('Your quiz draft is ready')->assertSee('Review and edit quiz');
     }
 
-    public function test_create_quiz_now_applies_the_draft_to_the_current_quiz_on_edit(): void
+    public function test_generation_job_records_failure_and_the_chat_can_retry(): void
     {
+        Bus::fake();
+        $this->swap(QuizDefinitionGenerator::class, new class implements QuizDefinitionGenerator
+        {
+            public function generate(array $brief, array $providerChain, string $systemPrompt): array
+            {
+                throw new GenerationException('ai_generation_failed', 'All configured AI providers failed.', [
+                    ['provider' => 'openrouter', 'model' => 'slow-model', 'message' => 'Timed out.'],
+                ]);
+            }
+        });
+
+        $component = Livewire::actingAs(User::factory()->create())
+            ->test(QuizDiscoveryChat::class)
+            ->call('startDiscovery', 'Consulting quiz for operations leaders')
+            ->call('executeNow');
+        $session = QuizDiscoverySession::query()->sole();
+
+        (new GenerateQuizDraftJob($session->id))->handle(app(GenerateQuizDraft::class));
+        $component->call('pollGeneration');
+
+        $this->assertSame(QuizDiscoveryStatus::Failed, $session->fresh()->status);
+        $component->assertSee('could not be completed')->assertSee('Try again');
+
+        $component->call('generateDraft');
+
+        $this->assertSame(QuizDiscoveryStatus::Generating, $session->fresh()->status);
+        Bus::assertDispatchedTimes(GenerateQuizDraftJob::class, 2);
+    }
+
+    public function test_create_quiz_now_queues_a_draft_for_the_current_quiz_on_edit(): void
+    {
+        Bus::fake();
         $user = User::factory()->create();
         $quiz = Quiz::factory()->create([
             'draft_definition' => ['schema_version' => 1, 'blocks' => []],
@@ -201,10 +266,11 @@ class QuizDiscoveryTest extends TestCase
         Livewire::actingAs($user)
             ->test(QuizDiscoveryChat::class, ['quizId' => $quiz->id])
             ->call('startDiscovery', 'Refresh this operations quiz')
-            ->call('executeNow')
-            ->assertRedirect(EditQuiz::getUrl(['record' => $quiz]));
+            ->call('executeNow');
 
         $this->assertSame(1, Quiz::query()->count());
-        $this->assertNotEmpty($quiz->fresh()->draft_definition['blocks']);
+        $this->assertSame($quiz->id, QuizDiscoverySession::query()->sole()->quiz_id);
+        $this->assertSame(QuizDiscoveryStatus::Generating, QuizDiscoverySession::query()->sole()->status);
+        Bus::assertDispatched(GenerateQuizDraftJob::class);
     }
 }

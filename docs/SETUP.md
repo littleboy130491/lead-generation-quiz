@@ -143,7 +143,7 @@ Open `/admin/login`, sign in, and confirm:
 Queue workers are required for AI analysis and report email:
 
 ```bash
-php artisan queue:work --queue=default,ai,mail --tries=1
+php artisan queue:work --queue=default,ai,mail --tries=1 --timeout=180
 # optional local scheduler:
 php artisan schedule:work
 ```
@@ -196,9 +196,9 @@ The `provider` string must match a key in `config/ai.php`, and that provider’s
 
 More detail: [ADMIN_SETTINGS.md](ADMIN_SETTINGS.md).
 
-### Request timeouts for synchronous generation
+### Request and worker timeouts for AI generation
 
-The AI quiz interview and quiz-draft generation call the provider inside the web request. Each attempt is allowed `operations.timeout_seconds` (Operational settings, default 60), and a chain is tried in order, so the worst case is `timeout_seconds × chain length + 15` seconds. The application raises its own PHP execution limit to that value, but the web server and PHP-FPM must allow it too or the request is killed after the provider has already been billed for the tokens.
+AI quiz interview turns and `POST /api/v1/quizzes/generate` call the provider inside the web request. Administrator quiz-draft generation is queued on `ai`; keep a supervised worker running or the chat will remain in `generating`. Each attempt is allowed `operations.timeout_seconds` (Operational settings, default 60), and a chain is tried in order, so the worst case is `timeout_seconds × chain length + 15` seconds. Web-server and PHP-FPM limits must cover synchronous paths, while the queue worker timeout must exceed that worst case.
 
 With a default 60-second timeout and a two-entry chain, allow at least 135 seconds:
 
@@ -220,6 +220,14 @@ max_execution_time = 180
 Some managed hosts list `set_time_limit` in `disable_functions`. The application skips the call there, so `max_execution_time` in `php.ini` becomes the only limit that matters and must be raised to the full value above. Check with `php -i | grep disable_functions`.
 
 Reload after editing: `sudo systemctl reload php8.4-fpm nginx`.
+
+Run the AI worker with a timeout above the provider-chain maximum. For the two-entry, 60-second example:
+
+```bash
+php artisan queue:work --queue=ai,default,mail --tries=1 --timeout=180
+```
+
+For the database queue, `DB_QUEUE_RETRY_AFTER` must be greater than the worker timeout. The repository default is 195 seconds for the command above. Increase both values together if the quiz chain or per-attempt timeout grows.
 
 ### Diagnosing a slow or failing generation
 
@@ -288,13 +296,16 @@ Then: set `APP_DEBUG=false`, configure HTTPS/`APP_URL`, durable database/queue, 
 | Media upload / Glide error about missing token | Run `php artisan curator:token` then `php artisan optimize:clear`. Confirm `CURATOR_GLIDE_TOKEN` in `.env`. |
 | Uploaded files 404 | Run `php artisan storage:link`. Confirm `CURATOR_DEFAULT_DISK=public`. |
 | AI quiz interview uses a basic scaffold | Optional: set a provider key in `.env` and add a matching Quiz AI provider/model row under Operational settings for model-written drafts. |
-| Quiz generation hangs then returns a gateway error (502/503/504) while the provider dashboard shows the tokens were billed | The request was killed before the provider replied. Raise `fastcgi_read_timeout`, `request_terminate_timeout`, and `max_execution_time` as described in [Request timeouts for synchronous generation](#request-timeouts-for-synchronous-generation), or lower `operations.timeout_seconds`. |
-| Quiz draft generation reports a provider or contract error | The chat notification now names the failing provider/model and reason. The same normalized message is stored on the `quiz_draft_generations` audit row. |
+| AI interview or generation API hangs then returns a gateway error (502/503/504) while the provider dashboard shows the tokens were billed | The synchronous request was killed before the provider replied. Raise `fastcgi_read_timeout`, `request_terminate_timeout`, and `max_execution_time` as described in [request and worker timeouts](#request-and-worker-timeouts-for-ai-generation), or lower `operations.timeout_seconds`. |
+| Quiz chat remains on “Generating your quiz draft” | Start or inspect the `ai` queue worker and failed-jobs table. Ensure the worker timeout exceeds `timeout_seconds × chain length + 15`. |
+| Quiz draft generation reports a provider or contract error | The chat appends a normalized failure message and offers retry. The same normalized message is stored on the `quiz_draft_generations` audit row. |
 | `/api/v1/*` returns `401 unauthenticated` | Set `QUIZ_GENERATION_API_TOKEN` and send `Authorization: Bearer …`. |
 | Cannot access Branding & design | Sign in as `admin` or `super_admin` after `AdminRoleSeeder`. |
 | Stale config after editing `.env` | `php artisan optimize:clear` |
 
 ## Verification
+
+The repository's tracked `.env.testing` pins testing commands to in-memory SQLite. Do not remove that isolation or point it at a development/production database.
 
 ```bash
 php artisan route:list

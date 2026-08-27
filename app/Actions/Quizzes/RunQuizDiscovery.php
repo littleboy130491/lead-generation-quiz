@@ -6,6 +6,7 @@ use App\Ai\Discovery\QuizDiscoveryBrief;
 use App\Ai\Discovery\QuizDiscoveryIntent;
 use App\Ai\Discovery\QuizDiscoveryInterviewer;
 use App\Ai\Discovery\QuizDiscoveryPrompt;
+use App\Enums\QuizDiscoveryStatus;
 use App\Models\QuizDiscoverySession;
 use App\Settings\ApplicationSettings;
 use Illuminate\Support\Facades\Cache;
@@ -19,7 +20,7 @@ class RunQuizDiscovery
      */
     public const HISTORY_TURNS = 12;
 
-    public const READY_MESSAGE = 'The brief is complete. Creating an editable quiz draft now.';
+    public const READY_MESSAGE = 'I have enough context. I’m generating your editable quiz draft now.';
 
     public function __construct(
         private QuizDiscoveryInterviewer $interviewer,
@@ -32,7 +33,7 @@ class RunQuizDiscovery
         $template = (string) ($prompts['discovery_template'] ?? QuizDiscoveryPrompt::DEFAULT_TEMPLATE);
         $session = QuizDiscoverySession::create([
             'user_id' => $userId,
-            'status' => 'interviewing',
+            'status' => QuizDiscoveryStatus::Interviewing,
             'brief' => [],
             'system_prompt_snapshot' => trim($template)."\n\n".QuizDiscoveryPrompt::TURN_CONTRACT,
         ]);
@@ -43,7 +44,7 @@ class RunQuizDiscovery
     public function reply(QuizDiscoverySession $session, string $message): QuizDiscoverySession
     {
         $message = trim(strip_tags($message));
-        if ($message === '') {
+        if ($message === '' || ! in_array($session->status, [QuizDiscoveryStatus::Interviewing, QuizDiscoveryStatus::Ready], true)) {
             return $session->fresh(['messages']) ?? $session;
         }
 
@@ -61,6 +62,24 @@ class RunQuizDiscovery
     {
         $session->messages()->create(['role' => 'user', 'content' => mb_substr($message, 0, 4000)]);
         $brief = $session->brief ?? [];
+        if (QuizDiscoveryIntent::wantsImmediateGeneration($message)) {
+            $ready = QuizDiscoveryBrief::hasEnoughContext($brief);
+            $assistantMessage = $ready
+                ? self::READY_MESSAGE
+                : 'Tell me a bit more about the quiz you want before I create it. What is the core idea?';
+            $session->update([
+                'brief' => $brief,
+                'status' => $ready ? QuizDiscoveryStatus::Ready : QuizDiscoveryStatus::Interviewing,
+            ]);
+            $session->messages()->create([
+                'role' => 'assistant',
+                'content' => $assistantMessage,
+                'brief_snapshot' => $brief,
+            ]);
+
+            return $session->fresh(['messages']) ?? $session;
+        }
+
         $history = $session->messages()
             ->orderByDesc('id')
             ->limit(self::HISTORY_TURNS)
@@ -75,7 +94,7 @@ class RunQuizDiscovery
             $brief = QuizDiscoveryBrief::merge($brief, ['business_context' => $message]);
         }
 
-        $action = QuizDiscoveryIntent::wantsImmediateGeneration($message) || ($response['action'] ?? 'continue') === 'generate'
+        $action = ($response['action'] ?? 'continue') === 'generate'
             ? 'generate'
             : 'continue';
         $assistantMessage = (string) $response['message'];
@@ -93,7 +112,7 @@ class RunQuizDiscovery
 
         $session->update([
             'brief' => $brief,
-            'status' => $action === 'generate' ? 'ready' : 'interviewing',
+            'status' => $action === 'generate' ? QuizDiscoveryStatus::Ready : QuizDiscoveryStatus::Interviewing,
         ]);
         $session->messages()->create([
             'role' => 'assistant',

@@ -380,13 +380,15 @@ System instructions must specify:
 
 ### 6.3 AI discovery interview
 
-Provide an authenticated Filament page and quiz create/edit modal that record a bounded interviewer conversation, derive only the allowlisted structured brief fields, and show them for optional administrator review/editing. The interview chat is the only administrator AI quiz-creation UI. Each turn is schema-constrained to a chat message, allowlisted brief fields, and `action` continue or generate. When the core brief is complete, or the administrator instructs the assistant to execute/create/generate now, invoke `GenerateQuizDraft` without requiring a separate brief form. Immediate generation needs at least business context or objective. Use the configured quiz chain when credentials exist; retain a deterministic guided fallback so discovery remains usable without credentials. Do not send the raw transcript to quiz generation. Do not emit quiz JSON in the chat message.
+Provide an authenticated Filament page and quiz create/edit modal that record a bounded interviewer conversation, derive only the allowlisted structured brief fields, and show them for optional administrator review/editing. The interview chat is the only administrator AI quiz-creation UI. Each turn is schema-constrained to a chat message, allowlisted brief fields, and `action` continue or generate. Recognize explicit generate-now intent locally before calling the interviewer. When the core brief is complete, or the administrator instructs the assistant to execute/create/generate now, atomically associate the session with its target quiz, enter `generating`, and dispatch `GenerateQuizDraftJob` to the `ai` queue without requiring a separate brief form. Return the Livewire request immediately, poll only while active, append assistant completion/failure messages, expose the generated draft link without forced redirect, and allow failed work to retry without duplicating an active attempt. Immediate generation needs at least business context or objective. Use the configured quiz chain when credentials exist; retain a deterministic guided fallback so discovery remains usable without credentials. Do not send the raw transcript to quiz generation. Do not emit quiz JSON in the chat message.
 
 ### 6.4 Admin generation flow
 
-Administrator generation is triggered from the interview (`action=generate`, an execute-now command, or **Create quiz now**). The server-to-server API still accepts the structured brief directly. When the persisted `ai.quiz` chain has no usable environment credentials, generation falls back to a validated structural scaffold from the sanitized brief. When credentials exist, use the provider chain with a V1 structured-output JSON schema matching `QuizDefinitionValidator` (schema_version, result, blocks, optional opening/score_results/thank_you); if every attempt fails, raise `ai_generation_failed`. Validate returned definition before applying it to the mutable draft.
+Administrator generation is triggered from the interview (`action=generate`, an execute-now command, or **Create quiz now**) and executed by an atomically claimed queued job; the server-to-server API remains synchronous and accepts the structured brief directly. Persist the session-to-quiz relationship before dispatch so polling and reopened chats resolve the same draft. When the persisted `ai.quiz` chain has no usable environment credentials, generation falls back to a validated structural scaffold from the sanitized brief. When credentials exist, use the provider chain with a V1 structured-output JSON schema matching `QuizDefinitionValidator` (schema_version, result, blocks, optional opening/score_results/thank_you); if every attempt fails, raise `ai_generation_failed`. Validate returned definition before applying it to the mutable draft. Exercise the job directly and prove duplicate deliveries cannot regenerate a completed session.
 
-Tests fake the Laravel AI SDK and prove invalid output cannot overwrite a draft. Feature tests cover execute-now, completed interviews, and interview-only create/edit headers.
+Tests fake the Laravel AI SDK and prove invalid output cannot overwrite a draft. Feature tests cover local execute-now short-circuiting, queued ready/completed interviews, job success/failure/idempotency, polling UI, and interview-only create/edit headers.
+
+Keep a tracked, secret-free `.env.testing` with `DB_DATABASE=:memory:` so required Artisan migration verification is isolated from the development SQLite file.
 
 ## 10. Phase 7 — AI report pipeline
 
@@ -473,7 +475,7 @@ Document production requirements:
 
 ```text
 * * * * * php artisan schedule:run
-php artisan queue:work --queue=default,ai,mail
+php artisan queue:work --queue=default,ai,mail --tries=1 --timeout=180
 ```
 
 Exact process supervision and queue backend are deployment decisions to record when selected.
