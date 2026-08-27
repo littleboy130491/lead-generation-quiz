@@ -417,6 +417,12 @@ Before creating a quiz draft, an administrator opens the **AI quiz interview** c
 
 Each interviewer turn is schema-constrained to a chat `message`, allowlisted `brief` fields, and `action` of `continue` or `generate`. The interviewer must not emit quiz JSON in the chat. When the core brief is complete, or when the administrator instructs the assistant to execute/create/generate the quiz now (chat command or **Create quiz now**), the application invokes `GenerateQuizDraft` with the allowlisted brief. Immediate generation requires at least `business_context` or `objective`; it does not require every optional brief field. Raw chat remains untrusted reference material and is never supplied to `GenerateQuizDraft`; only the derived allowlisted brief is passed. Generation uses the immutable V1 quiz-definition prompt, structured-output schema, validator, and audit contract. On quiz edit, a completed interview updates that quiz's mutable draft; otherwise it creates a new draft. Each session snapshots the configurable discovery system prompt plus the application-owned turn contract.
 
+Each turn replays only the most recent transcript window to the provider rather than the entire conversation; the reviewed brief carries durable context, so an unbounded transcript would raise latency and cost every turn without improving the interview. The interviewer instructions do not repeat the V1 quiz-definition output contract, because the interviewer only writes a chat message and allowlisted brief fields and is explicitly barred from emitting quiz JSON.
+
+A complete brief ends the interview: when every required brief field is filled, the turn resolves to `generate` even if the model asked a further question or requested confirmation, so a finished interview cannot stall. The existing `hasEnoughContext` downgrade still applies in the other direction.
+
+Turns for one session are serialized by an atomic lock. Rapid or duplicate submissions cannot run concurrently, so questions and answers cannot interleave; a turn that cannot claim the lock is dropped without persisting a message.
+
 The interview composer follows standard chat-input conventions: <kbd>Enter</kbd> sends the message and <kbd>Shift</kbd>+<kbd>Enter</kbd> inserts a new line. Sending is suppressed while an input-method composition is active so multi-keystroke scripts are not submitted mid-word. Blank or whitespace-only messages are never sent, and a send in flight cannot be duplicated by repeated key presses.
 
 ### 12.1a Server-to-server quiz-generation API
@@ -661,6 +667,13 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-27 — Faster, converging, serialized discovery turns
+
+- Removed the V1 quiz-definition output contract from the interview instructions. The interviewer never emits quiz JSON, so roughly a thousand tokens of schema rules were resent on every turn.
+- Interview turns now replay only a bounded window of recent messages instead of the whole transcript, which was growing prompt cost and latency on each turn.
+- A turn whose brief is complete now resolves to `generate` even when the model asks another question, so the interview cannot stall asking for confirmation after every required field is filled.
+- Turns for one session are serialized with an atomic lock. Concurrent submissions previously interleaved their questions and answers in the transcript.
 
 ### 2026-08-27 — Opt-in AI debug logging
 

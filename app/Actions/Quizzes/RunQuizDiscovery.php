@@ -8,9 +8,19 @@ use App\Ai\Discovery\QuizDiscoveryInterviewer;
 use App\Ai\Discovery\QuizDiscoveryPrompt;
 use App\Models\QuizDiscoverySession;
 use App\Settings\ApplicationSettings;
+use Illuminate\Support\Facades\Cache;
 
 class RunQuizDiscovery
 {
+    /**
+     * Only the most recent turns are replayed to the provider. The reviewed
+     * brief already carries the durable context, so an unbounded transcript
+     * would grow prompt cost and latency on every turn without adding value.
+     */
+    public const HISTORY_TURNS = 12;
+
+    public const READY_MESSAGE = 'The brief is complete. Creating an editable quiz draft now.';
+
     public function __construct(
         private QuizDiscoveryInterviewer $interviewer,
         private ApplicationSettings $settings,
@@ -37,9 +47,28 @@ class RunQuizDiscovery
             return $session->fresh(['messages']) ?? $session;
         }
 
+        // One turn at a time per session: rapid submissions would otherwise run
+        // concurrently and interleave their questions and answers.
+        $turn = Cache::lock('quiz-discovery-session:'.$session->id, 300)
+            ->get(fn (): QuizDiscoverySession => $this->runTurn($session, $message));
+
+        return $turn instanceof QuizDiscoverySession
+            ? $turn
+            : ($session->fresh(['messages']) ?? $session);
+    }
+
+    private function runTurn(QuizDiscoverySession $session, string $message): QuizDiscoverySession
+    {
         $session->messages()->create(['role' => 'user', 'content' => mb_substr($message, 0, 4000)]);
         $brief = $session->brief ?? [];
-        $history = $session->messages()->orderBy('id')->get(['role', 'content'])->map(fn ($item) => $item->only(['role', 'content']))->all();
+        $history = $session->messages()
+            ->orderByDesc('id')
+            ->limit(self::HISTORY_TURNS)
+            ->get(['id', 'role', 'content'])
+            ->sortBy('id')
+            ->map(fn ($item) => $item->only(['role', 'content']))
+            ->values()
+            ->all();
         $response = $this->interviewer->respond($brief, $history, $session->system_prompt_snapshot);
         $brief = QuizDiscoveryBrief::merge($brief, $response['brief']);
         if ($brief === [] && $message !== '' && ! QuizDiscoveryIntent::wantsImmediateGeneration($message)) {
@@ -50,6 +79,13 @@ class RunQuizDiscovery
             ? 'generate'
             : 'continue';
         $assistantMessage = (string) $response['message'];
+
+        // A complete brief ends the interview even when the model asks another
+        // question, so a finished interview cannot stall on confirmation.
+        if ($action === 'continue' && QuizDiscoveryBrief::isReady($brief)) {
+            $action = 'generate';
+            $assistantMessage = self::READY_MESSAGE;
+        }
         if ($action === 'generate' && ! QuizDiscoveryBrief::hasEnoughContext($brief)) {
             $action = 'continue';
             $assistantMessage = 'Tell me a bit more about the quiz you want before I create it. What is the core idea?';

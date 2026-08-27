@@ -11,6 +11,7 @@ use App\Models\Quiz;
 use App\Models\QuizDiscoverySession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -84,6 +85,76 @@ class QuizDiscoveryTest extends TestCase
         $this->assertSame('Help owners find bottlenecks', $session->brief['objective']);
         $this->assertSame('Owners of 10-50 person firms', $session->brief['target_audience']);
         $this->assertSame('The next operational action', $session->brief['desired_insight']);
+    }
+
+    public function test_a_complete_brief_ends_the_interview_even_when_the_model_keeps_asking(): void
+    {
+        $this->swap(QuizDiscoveryInterviewer::class, new class implements QuizDiscoveryInterviewer
+        {
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                return [
+                    'message' => 'Does this feel right? If so, I will generate the quiz draft.',
+                    'brief' => [
+                        'business_context' => 'Coaching service for dating app users',
+                        'objective' => 'Build confidence about preferences',
+                        'target_audience' => 'Adults on dating apps',
+                        'desired_insight' => 'A personalized archetype',
+                    ],
+                    'action' => 'continue',
+                ];
+            }
+        });
+
+        $session = app(RunQuizDiscovery::class)->start(User::factory()->create()->id, 'A dating coaching quiz');
+
+        $this->assertSame('ready', $session->status);
+        $this->assertSame(RunQuizDiscovery::READY_MESSAGE, $session->messages()->latest('id')->value('content'));
+    }
+
+    public function test_only_the_most_recent_turns_are_replayed_to_the_provider(): void
+    {
+        $seen = new class
+        {
+            public array $history = [];
+        };
+
+        $this->swap(QuizDiscoveryInterviewer::class, new class($seen) implements QuizDiscoveryInterviewer
+        {
+            public function __construct(private object $seen) {}
+
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                $this->seen->history = $messages;
+
+                return ['message' => 'And who is it for?', 'brief' => [], 'action' => 'continue'];
+            }
+        });
+
+        $session = app(RunQuizDiscovery::class)->start(User::factory()->create()->id, 'Turn 1');
+        foreach (range(2, 12) as $turn) {
+            $session = app(RunQuizDiscovery::class)->reply($session, 'Turn '.$turn);
+        }
+
+        $this->assertCount(RunQuizDiscovery::HISTORY_TURNS, $seen->history);
+        $this->assertSame('Turn 12', end($seen->history)['content']);
+        $this->assertNotContains('Turn 1', array_column($seen->history, 'content'));
+        $this->assertGreaterThan(RunQuizDiscovery::HISTORY_TURNS, $session->messages()->count());
+    }
+
+    public function test_a_concurrent_turn_for_the_same_session_is_dropped_rather_than_interleaved(): void
+    {
+        $session = app(RunQuizDiscovery::class)->start(User::factory()->create()->id, 'Consulting firm quiz');
+        $before = $session->messages()->count();
+
+        $lock = Cache::lock('quiz-discovery-session:'.$session->id, 300);
+        $lock->get();
+
+        $result = app(RunQuizDiscovery::class)->reply($session, 'Help owners find bottlenecks');
+        $lock->release();
+
+        $this->assertSame($before, $result->messages()->count());
+        $this->assertSame($before, $session->fresh()->messages()->count());
     }
 
     public function test_chat_execute_now_creates_a_validated_quiz_draft(): void
