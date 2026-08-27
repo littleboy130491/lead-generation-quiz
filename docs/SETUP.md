@@ -219,7 +219,26 @@ max_execution_time = 180
 
 Some managed hosts list `set_time_limit` in `disable_functions`. The application skips the call there, so `max_execution_time` in `php.ini` becomes the only limit that matters and must be raised to the full value above. Check with `php -i | grep disable_functions`.
 
-Reload after editing: `sudo systemctl reload php8.4-fpm nginx`. Lowering `operations.timeout_seconds` or shortening the chain reduces the required floor.
+Reload after editing: `sudo systemctl reload php8.4-fpm nginx`.
+
+### Diagnosing a slow or failing generation
+
+Turn on the AI debug log to see each provider call:
+
+```dotenv
+AI_DEBUG_LOG=true
+AI_DEBUG_LOG_CONTENT=true
+```
+
+Then `php artisan optimize:clear` and reproduce the problem. Each step is written to `storage/logs/ai-YYYY-MM-DD.log` with its provider, model, wall time in milliseconds, prompt/completion/reasoning token counts, finish reason, and normalized failure. Tail it while you use the chat:
+
+```bash
+tail -f storage/logs/ai-$(date +%F).log
+```
+
+Read `finish_reason` first. `length` means the model hit its output ceiling and the response was truncated — usually a schema or prompt that asks for too much, not a network problem. `stop` with a large `duration_ms` and high `completion_tokens` means the model genuinely generated that long. A `AI step failed` entry carries the provider's own error text.
+
+`AI_DEBUG_LOG_CONTENT` also records prompt and response bodies. Analysis calls include respondent answers, so enable it only for a deliberate debugging window, then set both flags back to `false`, run `php artisan optimize:clear`, and delete the `storage/logs/ai-*.log` files. API keys are never logged. Lowering `operations.timeout_seconds` or shortening the chain reduces the required floor.
 
 ## 9. Other common environment settings
 

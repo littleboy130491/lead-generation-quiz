@@ -453,6 +453,12 @@ Providers apply the quiz-definition and analysis JSON schemas in strict mode, wh
 
 Every synchronous provider invocation uses the Operational setting `operations.timeout_seconds` as its per-attempt request timeout instead of a hardcoded value. Quiz discovery, quiz-draft generation, and analysis all honor this setting. Administrator-facing generation runs inside the web request, so the application also raises the PHP execution limit for that request to the configured timeout multiplied by the number of chain entries, plus a fixed overhead allowance. Raising that limit is best-effort: hosts that place `set_time_limit` in `disable_functions` are detected and skipped rather than allowed to fail the request. Deployments must therefore set web-server and PHP-FPM timeouts at least as high as that total; the required values are normative in `docs/SETUP.md`. When a draft fails, the administrator-facing notification reports the normalized per-provider failure or validator message rather than a generic failure string; secrets are never included.
 
+### 12.3b AI debug logging
+
+Synchronous provider calls support opt-in diagnostics, disabled by default and controlled by environment configuration rather than database settings. When `AI_DEBUG_LOG` is enabled, each provider step writes provider, model, wall-clock duration, token usage, finish reason, and normalized failure to a dedicated rotating `ai` log channel. This records only operational metadata.
+
+Prompt and response bodies require the separate `AI_DEBUG_LOG_CONTENT` flag, because analysis prompts contain respondent answers. Content logging is intended for a bounded debugging window and must be disabled afterwards, with the rotated files removed. Provider credentials and other secrets are never written to this or any other log.
+
 ### 12.4 Prompt-injection defense
 
 - Respondent answers are explicitly labeled and delimited as untrusted data.
@@ -655,6 +661,11 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-27 — Opt-in AI debug logging
+
+- Added an environment-gated AI debug log (`AI_DEBUG_LOG`) that records provider, model, duration, token usage, and finish reason for every provider step on a dedicated rotating `ai` channel, so slow or truncated generations can be diagnosed instead of inferred from wall-clock delay.
+- Prompt and response bodies are recorded only under the separate `AI_DEBUG_LOG_CONTENT` flag, since analysis prompts contain respondent answers. Both flags default to off and credentials are never logged.
 
 ### 2026-08-27 — Guard the execution-limit extension on restricted hosts
 

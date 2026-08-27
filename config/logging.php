@@ -65,6 +65,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'ai' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ai.log'),
+            'level' => 'debug',
+            'days' => env('AI_DEBUG_LOG_DAYS', 3),
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Ai\Contracts\QuizAnalysisGenerator;
 use App\Ai\Contracts\QuizDefinitionGenerator;
+use App\Ai\Debug\AiDebugLogger;
 use App\Ai\Discovery\LaravelQuizDiscoveryInterviewer;
 use App\Ai\Discovery\QuizDiscoveryInterviewer;
 use App\Ai\LaravelAi\LaravelQuizAnalysisGenerator;
@@ -15,8 +16,13 @@ use App\Security\Turnstile\NullTurnstileVerifier;
 use App\Security\Turnstile\TurnstileVerifier;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Events\ProviderFailedOver;
+use Laravel\Ai\Events\StartingStep;
+use Laravel\Ai\Events\StepCompleted;
+use Laravel\Ai\Events\StepFailed;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -40,5 +46,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('quiz-progress', fn (Request $request) => Limit::perMinute(30)->by($request->ip()));
         RateLimiter::for('quiz-questionnaire', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
         RateLimiter::for('quiz-contact', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
+
+        if (AiDebugLogger::enabled()) {
+            Event::listen(StartingStep::class, [AiDebugLogger::class, 'handleStartingStep']);
+            Event::listen(StepCompleted::class, [AiDebugLogger::class, 'handleStepCompleted']);
+            Event::listen(StepFailed::class, [AiDebugLogger::class, 'handleStepFailed']);
+            Event::listen(ProviderFailedOver::class, [AiDebugLogger::class, 'handleProviderFailedOver']);
+        }
     }
 }
