@@ -12,6 +12,11 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
  * be listed as required. Fields that the definition treats as optional are
  * therefore required-and-nullable, and QuizDefinitionSanitizer drops the nulls
  * before validation.
+ *
+ * Question image and icon fields are deliberately absent. The prompt forbids
+ * inventing URLs, so the model would only ever emit them as null, and under
+ * strict mode every property costs output tokens on every block. Administrators
+ * can still set both by hand; the persisted contract is unchanged.
  */
 final class QuizDefinitionJsonSchema
 {
@@ -53,8 +58,6 @@ final class QuizDefinitionJsonSchema
             'visibility' => $visibility,
             'yes_score' => $schema->integer()->nullable()->required(),
             'no_score' => $schema->integer()->nullable()->required(),
-            'image_url' => $schema->string()->nullable()->required(),
-            'icon' => $schema->string()->nullable()->required(),
             'exclude_from_ai' => $schema->boolean()->nullable()->required(),
             'markdown' => $schema->string()->nullable()->required(),
             'continue_label' => $schema->string()->nullable()->required(),

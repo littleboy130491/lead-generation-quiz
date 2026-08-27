@@ -236,6 +236,8 @@ Then `php artisan optimize:clear` and reproduce the problem. Each step is writte
 tail -f storage/logs/ai-$(date +%F).log
 ```
 
+Watch `reasoning_tokens` too. Reasoning models spend hidden tokens before writing anything, and that time counts against the request timeout. `AI_DISABLE_REASONING=true` (the default) asks providers that support the toggle to turn it off for these schema-constrained calls; set it to `false` only if output quality demands it, and raise `operations.timeout_seconds` and the server timeouts to match.
+
 Read `finish_reason` first. `length` means the model hit its output ceiling and the response was truncated — usually a schema or prompt that asks for too much, not a network problem. `stop` with a large `duration_ms` and high `completion_tokens` means the model genuinely generated that long. A `AI step failed` entry carries the provider's own error text.
 
 `AI_DEBUG_LOG_CONTENT` also records prompt and response bodies. Analysis calls include respondent answers, so enable it only for a deliberate debugging window, then set both flags back to `false`, run `php artisan optimize:clear`, and delete the `storage/logs/ai-*.log` files. API keys are never logged. Lowering `operations.timeout_seconds` or shortening the chain reduces the required floor.

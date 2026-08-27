@@ -46,7 +46,7 @@ The object must conform to schema version 1:
   ],
   "thank_you": {"enabled": true, "html": "optional safe static HTML"},
   "blocks": [
-    {"id": "stable_id", "type": "question", "question_type": "single_choice" | "multiple_choice" | "yes_no" | "short_text" | "long_text", "label": "string", "help": "optional string", "required": true, "max_length": 200, "options": [{"id": "stable_id", "value": "machine_value", "label": "display label", "score": 0}], "visibility": {"question_id": "earlier_id", "operator": "equals", "value": "valid_option"}, "yes_score": 0, "no_score": 0, "image_url": "optional https URL", "icon": "optional plain text", "exclude_from_ai": true},
+    {"id": "stable_id", "type": "question", "question_type": "single_choice" | "multiple_choice" | "yes_no" | "short_text" | "long_text", "label": "string", "help": "optional string", "required": true, "max_length": 200, "options": [{"id": "stable_id", "value": "machine_value", "label": "display label", "score": 0}], "visibility": {"question_id": "earlier_id", "operator": "equals", "value": "valid_option"}, "yes_score": 0, "no_score": 0, "exclude_from_ai": true},
     {"id": "stable_id", "type": "content", "markdown": "safe Markdown", "continue_label": "optional string", "visibility": {"question_id": "earlier_id", "operator": "equals", "value": "valid_option"}},
     {"id": "stable_id", "type": "page_break"}
   ]

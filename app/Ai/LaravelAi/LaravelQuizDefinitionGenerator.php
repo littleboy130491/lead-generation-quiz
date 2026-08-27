@@ -32,10 +32,12 @@ class LaravelQuizDefinitionGenerator implements QuizDefinitionGenerator
         foreach ($usable as $entry) {
             try {
                 $this->configured->applyRuntimeConfig($entry);
-                $response = \Laravel\Ai\agent(
+                $response = (new StructuredGenerationAgent(
                     instructions: $systemPrompt,
+                    messages: [],
+                    tools: [],
                     schema: fn (JsonSchema $schema) => QuizDefinitionJsonSchema::definition($schema),
-                )->prompt('<untrusted_administrator_brief>'.json_encode($brief, JSON_THROW_ON_ERROR).'</untrusted_administrator_brief>', provider: Lab::from($entry['provider']), model: $entry['model'], timeout: $timeout);
+                ))->prompt('<untrusted_administrator_brief>'.json_encode($brief, JSON_THROW_ON_ERROR).'</untrusted_administrator_brief>', provider: Lab::from($entry['provider']), model: $entry['model'], timeout: $timeout);
 
                 return QuizDefinitionSanitizer::sanitize($response->toArray());
             } catch (\Throwable $exception) {

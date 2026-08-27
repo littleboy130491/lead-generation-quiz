@@ -3,6 +3,7 @@
 namespace App\Ai\Discovery;
 
 use App\Ai\ConfiguredAiProviders;
+use App\Ai\LaravelAi\StructuredGenerationAgent;
 use App\Settings\ApplicationSettings;
 use App\Support\RequestTimeLimit;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -31,10 +32,12 @@ class LaravelQuizDiscoveryInterviewer implements QuizDiscoveryInterviewer
         foreach ($chain as $entry) {
             try {
                 $this->configured->applyRuntimeConfig($entry);
-                $response = \Laravel\Ai\agent(
+                $response = (new StructuredGenerationAgent(
                     instructions: $instructions,
+                    messages: [],
+                    tools: [],
                     schema: fn (JsonSchema $schema) => $this->schema($schema),
-                )->prompt("Current reviewed brief:\n".json_encode($brief, JSON_THROW_ON_ERROR)."\n\nConversation:\n<untrusted_admin_chat>\n{$history}\n</untrusted_admin_chat>", provider: Lab::from($entry['provider']), model: $entry['model'], timeout: $timeout);
+                ))->prompt("Current reviewed brief:\n".json_encode($brief, JSON_THROW_ON_ERROR)."\n\nConversation:\n<untrusted_admin_chat>\n{$history}\n</untrusted_admin_chat>", provider: Lab::from($entry['provider']), model: $entry['model'], timeout: $timeout);
                 $data = $response->toArray();
                 $message = trim((string) ($data['message'] ?? ''));
                 if ($message === '') {

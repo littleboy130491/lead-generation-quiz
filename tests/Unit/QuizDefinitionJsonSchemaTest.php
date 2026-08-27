@@ -31,6 +31,14 @@ class QuizDefinitionJsonSchemaTest extends TestCase
         $this->assertSame(QuizDefinitionJsonSchema::BLOCK_TYPES, $block['properties']['type']['enum']);
     }
 
+    public function test_fields_the_model_may_not_invent_are_absent_from_the_schema(): void
+    {
+        $block = $this->schema()['properties']['blocks']['items'];
+
+        $this->assertArrayNotHasKey('image_url', $block['properties']);
+        $this->assertArrayNotHasKey('icon', $block['properties']);
+    }
+
     public function test_sanitizer_drops_strict_mode_null_placeholders(): void
     {
         $definition = QuizDefinitionSanitizer::sanitize([

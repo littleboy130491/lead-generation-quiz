@@ -459,6 +459,14 @@ Providers apply the quiz-definition and analysis JSON schemas in strict mode, wh
 
 Every synchronous provider invocation uses the Operational setting `operations.timeout_seconds` as its per-attempt request timeout instead of a hardcoded value. Quiz discovery, quiz-draft generation, and analysis all honor this setting. Administrator-facing generation runs inside the web request, so the application also raises the PHP execution limit for that request to the configured timeout multiplied by the number of chain entries, plus a fixed overhead allowance. Raising that limit is best-effort: hosts that place `set_time_limit` in `disable_functions` are detected and skipped rather than allowed to fail the request. Deployments must therefore set web-server and PHP-FPM timeouts at least as high as that total; the required values are normative in `docs/SETUP.md`. When a draft fails, the administrator-facing notification reports the normalized per-provider failure or validator message rather than a generic failure string; secrets are never included.
 
+### 12.3c Reasoning and output bounds
+
+All application generation calls produce a schema-constrained object rather than open-ended prose. Extended model reasoning therefore adds latency and hidden token cost without improving conformance, and can consume the entire request timeout before any output is produced. Providers that support toggling extended reasoning are asked to disable it for these calls; providers without such a toggle receive no extra options. The behavior is environment-configurable and enabled by default.
+
+Each attempt also carries an upper bound on generated tokens as a runaway guard. The bound must exceed the largest expected definition, because a response truncated at the bound is rejected by validation and reported as a `length` finish reason in the AI debug log.
+
+The quiz-definition schema omits question image and icon fields. The prompt already forbids inventing URLs, so the model could only ever emit them empty, while strict mode charges output tokens for every declared property on every block. Administrators may still set both by hand; the persisted definition contract and validator are unchanged.
+
 ### 12.3b AI debug logging
 
 Synchronous provider calls support opt-in diagnostics, disabled by default and controlled by environment configuration rather than database settings. When `AI_DEBUG_LOG` is enabled, each provider step writes provider, model, wall-clock duration, token usage, finish reason, and normalized failure to a dedicated rotating `ai` log channel. This records only operational metadata.
@@ -667,6 +675,11 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-27 — Disable extended reasoning for schema-constrained calls
+
+- Debug logs showed a reasoning model spending 1,670 hidden tokens on an interview turn whose entire reply was two words, and quiz-definition generation aborting at exactly the 60-second request timeout with `ProviderConnectionException`. Generation calls now run through an application agent that asks providers supporting the toggle to disable extended reasoning, and that bounds generated tokens per attempt. Both are environment-configurable.
+- Removed question image and icon fields from the generation schema. The prompt forbids inventing URLs, so under strict mode they only ever cost output tokens on every block. The persisted contract and validator still accept both from administrators.
 
 ### 2026-08-27 — Faster, converging, serialized discovery turns
 
