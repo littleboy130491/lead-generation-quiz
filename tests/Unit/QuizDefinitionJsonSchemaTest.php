@@ -98,6 +98,58 @@ class QuizDefinitionJsonSchemaTest extends TestCase
         $this->assertSame(['id', 'value', 'label'], array_keys($definition['blocks'][0]['options'][0]));
     }
 
+    public function test_sanitizer_drops_falsy_placeholders_that_do_not_belong_to_the_block_type(): void
+    {
+        $definition = QuizDefinitionSanitizer::sanitize([
+            'schema_version' => 1,
+            'result' => ['mode' => 'ai', 'system_prompt' => null],
+            'blocks' => [
+                [
+                    'id' => 'q1',
+                    'type' => 'question',
+                    'question_type' => 'single_choice',
+                    'label' => 'How large is your team?',
+                    'help' => '',
+                    'required' => true,
+                    'max_length' => 0,
+                    'options' => [['id' => 'o1', 'value' => 'small', 'label' => 'Under ten', 'score' => 0]],
+                    'yes_score' => 0,
+                    'no_score' => 0,
+                    'exclude_from_ai' => false,
+                    'markdown' => '',
+                    'continue_label' => '',
+                ],
+                [
+                    'id' => 'p1',
+                    'type' => 'page_break',
+                    'question_type' => null,
+                    'label' => '',
+                    'required' => false,
+                    'yes_score' => 0,
+                    'exclude_from_ai' => false,
+                    'options' => [],
+                ],
+                [
+                    'id' => 'q2',
+                    'type' => 'question',
+                    'question_type' => 'yes_no',
+                    'label' => 'Do you track cycle time?',
+                    'required' => true,
+                    'options' => [],
+                    'yes_score' => 0,
+                    'no_score' => 0,
+                    'max_length' => 200,
+                ],
+            ],
+        ]);
+
+        app(QuizDefinitionValidator::class)->validate($definition);
+
+        $this->assertSame(['id', 'type'], array_keys($definition['blocks'][1]));
+        $this->assertSame(['id', 'type', 'question_type', 'label', 'required', 'options', 'exclude_from_ai'], array_keys($definition['blocks'][0]));
+        $this->assertSame(['id', 'type', 'question_type', 'label', 'required', 'yes_score', 'no_score'], array_keys($definition['blocks'][2]));
+    }
+
     /** @return array<string, mixed> */
     private function schema(): array
     {
