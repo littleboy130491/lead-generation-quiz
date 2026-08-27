@@ -131,9 +131,9 @@
                     id="quiz-chat-message"
                     class="quiz-chat__textarea"
                     x-model="draft"
-                    x-on:keydown.enter.meta.prevent="send()"
-                    x-on:keydown.enter.ctrl.prevent="send()"
+                    x-on:keydown.enter="if (! $event.shiftKey && ! $event.isComposing) { $event.preventDefault(); send() }"
                     rows="2"
+                    title="Enter sends. Shift + Enter adds a new line."
                     aria-label="{{ $sessionId === null ? 'Describe the quiz you want to create' : 'Write your answer' }}"
                     placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write a reply, or say create the quiz now…' }}"
                 ></textarea>

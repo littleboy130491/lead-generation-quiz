@@ -45,6 +45,18 @@ class QuizDiscoveryTest extends TestCase
             ->assertSee('What quiz do you want to create?');
     }
 
+    public function test_the_composer_sends_on_enter_and_keeps_shift_enter_for_new_lines(): void
+    {
+        $composer = Livewire::actingAs(User::factory()->create())
+            ->test(QuizDiscoveryChat::class)
+            ->html();
+
+        $this->assertStringContainsString('x-on:keydown.enter=', $composer);
+        $this->assertStringContainsString('$event.shiftKey', $composer);
+        $this->assertStringContainsString('$event.isComposing', $composer);
+        $this->assertStringNotContainsString('keydown.enter.meta', $composer);
+    }
+
     public function test_execute_now_marks_the_interview_ready_without_storing_the_command_as_a_brief_field(): void
     {
         $user = User::factory()->create();

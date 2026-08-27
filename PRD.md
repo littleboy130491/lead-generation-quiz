@@ -417,6 +417,8 @@ Before creating a quiz draft, an administrator opens the **AI quiz interview** c
 
 Each interviewer turn is schema-constrained to a chat `message`, allowlisted `brief` fields, and `action` of `continue` or `generate`. The interviewer must not emit quiz JSON in the chat. When the core brief is complete, or when the administrator instructs the assistant to execute/create/generate the quiz now (chat command or **Create quiz now**), the application invokes `GenerateQuizDraft` with the allowlisted brief. Immediate generation requires at least `business_context` or `objective`; it does not require every optional brief field. Raw chat remains untrusted reference material and is never supplied to `GenerateQuizDraft`; only the derived allowlisted brief is passed. Generation uses the immutable V1 quiz-definition prompt, structured-output schema, validator, and audit contract. On quiz edit, a completed interview updates that quiz's mutable draft; otherwise it creates a new draft. Each session snapshots the configurable discovery system prompt plus the application-owned turn contract.
 
+The interview composer follows standard chat-input conventions: <kbd>Enter</kbd> sends the message and <kbd>Shift</kbd>+<kbd>Enter</kbd> inserts a new line. Sending is suppressed while an input-method composition is active so multi-keystroke scripts are not submitted mid-word. Blank or whitespace-only messages are never sent, and a send in flight cannot be duplicated by repeated key presses.
+
 ### 12.1a Server-to-server quiz-generation API
 
 `POST /api/v1/quizzes/generate` is a narrow server-to-server interface over the same draft-generation and optional publication actions. It accepts only allowlisted quiz metadata plus the documented structured brief; it does not accept arbitrary prompts, raw definitions, credentials, or frontend code. Authentication is a single environment-only `QUIZ_GENERATION_API_TOKEN` Bearer secret, compared in constant time and required even when the value is absent (fail closed). The route is rate-limited to 20 requests/minute. `publish: false` returns an editable draft; `publish: true` creates a new immutable active revision. When no usable quiz AI credentials exist, the endpoint still succeeds with a validated structural scaffold from the brief. Failed provider attempts (credentials present but every attempt failed) retain their draft and append-only audit row for authorized inspection, return only normalized non-secret errors, and are never silently deleted. The comprehensive request/response, error, authentication, rotation, and operational contract is normative in `docs/QUIZ_GENERATION_API.md`.
@@ -653,6 +655,11 @@ The public respondent runner is a server-authoritative Blade flow. It compiles t
 The administrator-only Branding & design settings page is available to `super_admin` and `admin`. It includes a database-backed static completion/thank-you HTML field. The completion view renders only a server-sanitized, fixed allowlist of structural and text HTML (headings, paragraphs, lists, emphasis, links, images, divs, and spans). It never evaluates stored content as Blade/PHP/JavaScript and never interpolates respondent data into it. Scripts, styles, forms, embedded content, event handlers, inline styles, unsafe URLs, and unrecognized elements/attributes are removed at render time.
 
 ## 23. Change Log
+
+### 2026-08-27 — Interview composer sends on Enter
+
+- The AI quiz interview composer now sends on <kbd>Enter</kbd> and inserts a new line on <kbd>Shift</kbd>+<kbd>Enter</kbd>, replacing the previous <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd>-only binding that left plain Enter inserting a line break.
+- Enter does not send while an input-method composition is active, so multi-keystroke scripts are not submitted mid-word.
 
 ### 2026-08-27 — Strict structured-output schemas and configurable synchronous timeouts
 
