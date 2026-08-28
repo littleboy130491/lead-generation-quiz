@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Quizzes\GenerateQuizDraft;
+use App\Actions\Quizzes\PublishQuizRevision;
 use App\Actions\Quizzes\RunQuizDiscovery;
 use App\Actions\Quizzes\StopQuizDraftGeneration;
 use App\Ai\Contracts\QuizDefinitionGenerator;
@@ -10,6 +11,7 @@ use App\Ai\Discovery\LaravelQuizDiscoveryInterviewer;
 use App\Ai\Discovery\QuizDiscoveryInterviewer;
 use App\Ai\GenerationException;
 use App\Ai\HeuristicQuizDefinitionGenerator;
+use App\Enums\QuizDiscoveryMode;
 use App\Enums\QuizDiscoveryStatus;
 use App\Jobs\GenerateQuizDraftJob;
 use App\Livewire\QuizDiscoveryChat;
@@ -52,6 +54,36 @@ class QuizDiscoveryTest extends TestCase
             ->assertOk()
             ->assertSee('AI quiz interview')
             ->assertSee('What quiz do you want to create?');
+    }
+
+    public function test_assistant_messages_render_safe_markdown_while_user_messages_remain_plain_text(): void
+    {
+        $user = User::factory()->create();
+        $session = QuizDiscoverySession::query()->create([
+            'user_id' => $user->id,
+            'status' => QuizDiscoveryStatus::Interviewing,
+            'brief' => [],
+            'system_prompt_snapshot' => 'Safe discovery prompt.',
+        ]);
+        $session->messages()->create([
+            'role' => 'user',
+            'content' => '**Keep this plain** <script>alert("user")</script>',
+        ]);
+        $session->messages()->create([
+            'role' => 'assistant',
+            'content' => "## Recommendation\n\n- Keep the strongest question\n- Shorten the introduction\n\n[Unsafe](javascript:alert('assistant'))\n\n<script>alert('assistant')</script>",
+        ]);
+
+        $html = Livewire::actingAs($user)
+            ->test(QuizDiscoveryChat::class)
+            ->html();
+
+        $this->assertStringContainsString('<h2>Recommendation</h2>', $html);
+        $this->assertStringContainsString('<li>Keep the strongest question</li>', $html);
+        $this->assertStringContainsString('**Keep this plain**', $html);
+        $this->assertStringNotContainsString('<strong>Keep this plain</strong>', $html);
+        $this->assertStringNotContainsString('<script>', $html);
+        $this->assertStringNotContainsString('javascript:', $html);
     }
 
     public function test_the_composer_sends_on_enter_and_keeps_shift_enter_for_new_lines(): void
@@ -133,6 +165,32 @@ class QuizDiscoveryTest extends TestCase
 
         $this->assertSame(QuizDiscoveryStatus::Ready, $session->status);
         $this->assertSame('Does this feel right? If so, I will generate the quiz draft.', $session->messages()->latest('id')->value('content'));
+    }
+
+    public function test_an_unspecified_interviewer_question_count_is_left_for_the_generation_agent(): void
+    {
+        $this->swap(QuizDiscoveryInterviewer::class, new class implements QuizDiscoveryInterviewer
+        {
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                return [
+                    'message' => 'The brief is ready, and the generation agent will choose the ideal quiz length.',
+                    'brief' => [
+                        'business_context' => 'Nutrition coaching for busy founders',
+                        'objective' => 'Identify the most useful dietary next step',
+                        'target_audience' => 'Busy founders',
+                        'desired_insight' => 'Their primary dietary obstacle',
+                        'question_count' => 0,
+                    ],
+                    'action' => 'generate',
+                ];
+            }
+        });
+
+        $session = app(RunQuizDiscovery::class)->start(User::factory()->create()->id, 'Create a nutrition coaching quiz');
+
+        $this->assertSame(QuizDiscoveryStatus::Ready, $session->status);
+        $this->assertArrayNotHasKey('question_count', $session->brief);
     }
 
     public function test_a_ready_interview_waits_for_an_explicit_generation_request_and_accepts_more_context(): void
@@ -417,22 +475,198 @@ class QuizDiscoveryTest extends TestCase
         $this->assertSame('Quiz draft generation was stopped.', $session->messages()->latest('id')->value('content'));
     }
 
-    public function test_create_quiz_now_queues_a_draft_for_the_current_quiz_on_edit(): void
+    public function test_edit_interview_sends_an_immutable_existing_quiz_snapshot_to_the_agent(): void
     {
         Bus::fake();
-        $user = User::factory()->create();
+        $seen = new class
+        {
+            public array $messages = [];
+        };
+        $this->swap(QuizDiscoveryInterviewer::class, new class($seen) implements QuizDiscoveryInterviewer
+        {
+            public function __construct(private object $seen) {}
+
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                $this->seen->messages = $messages;
+
+                return [
+                    'message' => 'I recommend improving the diagnostic flow. You can update the quiz now or keep refining it.',
+                    'brief' => [
+                        'business_context' => 'Existing operations assessment',
+                        'objective' => 'Improve diagnostic usefulness',
+                        'target_audience' => 'Operations leaders',
+                        'desired_insight' => 'A prioritized operational next step',
+                    ],
+                    'action' => 'generate',
+                ];
+            }
+        });
         $quiz = Quiz::factory()->create([
-            'draft_definition' => ['schema_version' => 1, 'blocks' => []],
+            'name' => 'Operations assessment',
+            'description' => 'Find the next operational priority.',
+            'draft_definition' => [
+                'schema_version' => 1,
+                'blocks' => [[
+                    'id' => 'existing-readiness',
+                    'type' => 'question',
+                    'question_type' => 'yes_no',
+                    'label' => 'Is your delivery process documented?',
+                ]],
+            ],
         ]);
 
-        Livewire::actingAs($user)
-            ->test(QuizDiscoveryChat::class, ['quizId' => $quiz->id])
-            ->call('startDiscovery', 'Refresh this operations quiz')
-            ->call('executeNow');
+        $component = Livewire::actingAs(User::factory()->create())
+            ->test(QuizDiscoveryChat::class, ['quizId' => $quiz->id, 'mode' => 'edit'])
+            ->assertSee('How should this quiz improve?')
+            ->call('startDiscovery', 'Make the recommendations more actionable.');
 
-        $this->assertSame(1, Quiz::query()->count());
-        $this->assertSame($quiz->id, QuizDiscoverySession::query()->sole()->quiz_id);
-        $this->assertSame(QuizDiscoveryStatus::Generating, QuizDiscoverySession::query()->sole()->status);
+        $session = QuizDiscoverySession::query()->sole();
+        $context = json_encode($seen->messages[0] ?? [], JSON_THROW_ON_ERROR);
+
+        $this->assertSame(QuizDiscoveryMode::Edit, $session->mode);
+        $this->assertSame('existing-readiness', $session->source_quiz_snapshot['draft_definition']['blocks'][0]['id']);
+        $this->assertArrayNotHasKey('settings', $session->source_quiz_snapshot);
+        $this->assertStringContainsString('existing-readiness', $context);
+        $this->assertStringContainsString('Operations assessment', $context);
+        $component->assertSee('Update quiz')->assertDontSee('Create quiz now');
+        $this->assertSame('existing-readiness', $quiz->fresh()->draft_definition['blocks'][0]['id']);
+        Bus::assertNotDispatched(GenerateQuizDraftJob::class);
+
+        $this->expectException(\LogicException::class);
+        $session->update(['source_quiz_snapshot' => ['name' => 'Changed after the interview']]);
+    }
+
+    public function test_edit_interview_does_not_offer_or_apply_an_update_before_the_agent_is_ready(): void
+    {
+        Bus::fake();
+        $interviewer = new class implements QuizDiscoveryInterviewer
+        {
+            public int $calls = 0;
+
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                $this->calls++;
+
+                return [
+                    'message' => $this->calls === 1
+                        ? 'What should the updated result help respondents decide?'
+                        : 'I recommend a shorter diagnostic flow. You can update the quiz or keep refining it.',
+                    'brief' => [
+                        'business_context' => 'Existing assessment',
+                        'objective' => 'Improve the result',
+                        'target_audience' => 'Business owners',
+                        'desired_insight' => 'A clear next step',
+                    ],
+                    'action' => $this->calls === 1 ? 'continue' : 'generate',
+                ];
+            }
+        };
+        $this->swap(QuizDiscoveryInterviewer::class, $interviewer);
+        $quiz = Quiz::factory()->create();
+
+        $component = Livewire::actingAs(User::factory()->create())
+            ->test(QuizDiscoveryChat::class, ['quizId' => $quiz->id, 'mode' => 'edit'])
+            ->call('startDiscovery', 'Improve this quiz')
+            ->assertDontSee('Update quiz');
+
+        $component->call('executeNow');
+        $this->assertSame(QuizDiscoveryStatus::Interviewing, QuizDiscoverySession::query()->sole()->status);
+        Bus::assertNotDispatched(GenerateQuizDraftJob::class);
+
+        $component->call('sendReply', 'It should recommend one prioritized action.')
+            ->assertSee('Update quiz');
+        $this->assertSame(QuizDiscoveryStatus::Ready, QuizDiscoverySession::query()->sole()->status);
+    }
+
+    public function test_explicit_ai_update_replaces_the_complete_draft_and_preserves_the_published_revision(): void
+    {
+        Bus::fake();
+        $publishedDefinition = app(HeuristicQuizDefinitionGenerator::class)->generate([
+            'business_context' => 'Published baseline',
+            'question_count' => 1,
+        ]);
+        $quiz = Quiz::factory()->create([
+            'name' => 'Immutable identity',
+            'slug' => 'immutable-identity',
+            'settings' => ['collect_name' => true],
+            'draft_definition' => $publishedDefinition,
+        ]);
+        $revision = app(PublishQuizRevision::class)->handle($quiz);
+        $existingDraft = [
+            'schema_version' => 1,
+            'result' => ['mode' => 'ai'],
+            'blocks' => [[
+                'id' => 'old-draft-question',
+                'type' => 'question',
+                'question_type' => 'yes_no',
+                'label' => 'Old editable question?',
+            ]],
+        ];
+        $quiz->update(['draft_definition' => $existingDraft]);
+
+        $this->swap(QuizDiscoveryInterviewer::class, new class implements QuizDiscoveryInterviewer
+        {
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                return [
+                    'message' => 'I recommend replacing the old question with a focused readiness sequence.',
+                    'brief' => [
+                        'business_context' => 'Improve the existing assessment',
+                        'objective' => 'Make recommendations actionable',
+                        'target_audience' => 'Operations leaders',
+                        'desired_insight' => 'Their next operational priority',
+                    ],
+                    'action' => 'generate',
+                ];
+            }
+        });
+        $seen = new class
+        {
+            public array $brief = [];
+        };
+        $this->swap(QuizDefinitionGenerator::class, new class($seen) implements QuizDefinitionGenerator
+        {
+            public function __construct(private object $seen) {}
+
+            public function generate(array $brief, array $providerChain, string $systemPrompt): array
+            {
+                $this->seen->brief = $brief;
+
+                return [
+                    'schema_version' => 1,
+                    'result' => ['mode' => 'ai'],
+                    'blocks' => [[
+                        'id' => 'replacement-question',
+                        'type' => 'question',
+                        'question_type' => 'yes_no',
+                        'label' => 'Is the highest-priority process documented?',
+                    ]],
+                ];
+            }
+        });
+        $component = Livewire::actingAs(User::factory()->create())
+            ->test(QuizDiscoveryChat::class, ['quizId' => $quiz->id, 'mode' => 'edit'])
+            ->call('startDiscovery', 'Make this quiz more actionable.')
+            ->assertSee('Update quiz');
+
+        $component->call('executeNow');
+        $session = QuizDiscoverySession::query()->sole();
+        $this->assertSame(QuizDiscoveryStatus::Generating, $session->status);
+        $this->assertSame('old-draft-question', $quiz->fresh()->draft_definition['blocks'][0]['id']);
         Bus::assertDispatched(GenerateQuizDraftJob::class);
+
+        (new GenerateQuizDraftJob($session->id, (string) $session->generation_token))->handle(app(GenerateQuizDraft::class));
+
+        $updated = $quiz->fresh();
+        $this->assertSame('replacement-question', $updated->draft_definition['blocks'][0]['id']);
+        $this->assertSame('old-draft-question', $seen->brief['existing_quiz']['draft_definition']['blocks'][0]['id']);
+        $this->assertSame('Immutable identity', $updated->name);
+        $this->assertSame('immutable-identity', $updated->slug);
+        $this->assertSame(['collect_name' => true], $updated->settings);
+        $this->assertSame($revision->id, $updated->active_revision_id);
+        $this->assertSame($publishedDefinition, $revision->fresh()->definition);
+        $this->assertSame(QuizDiscoveryStatus::Generated, $session->fresh()->status);
+        $component->call('pollGeneration')->assertSee('Quiz draft updated');
     }
 }

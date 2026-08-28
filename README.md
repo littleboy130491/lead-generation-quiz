@@ -88,13 +88,13 @@ Starting a public quiz immediately creates a UUID-backed submission and records 
 Queue workers perform AI generation and email sends; scheduler commands reconcile lost, stale, and bounded-retry work:
 
 ```bash
-php artisan queue:work --queue=default,ai,mail --tries=1 --timeout=180
+php artisan queue:work --queue=default,ai,mail --tries=1 --timeout=400
 php artisan schedule:work
 # or cron every minute in production:
 * * * * * cd /path/to/lead-generation-quiz && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-The recovery commands use persisted execution leases and monotonically increasing generations. Administrator quiz-draft generation also runs on the `ai` queue so the interview remains responsive; its worker timeout must exceed `operations.timeout_seconds × quiz chain length + 15`, and database-queue `DB_QUEUE_RETRY_AFTER` must be longer than that worker timeout (the documented defaults are 180 and 195 seconds). Do not run a worker with a lease shorter than the expected provider call without configuring a suitable heartbeat/lease policy. A recovered job fences stale completion writes; external providers are not generally exactly-once, so production providers should also use their own supported idempotency mechanism where available.
+The recovery commands use persisted execution leases and monotonically increasing generations. Administrator quiz-draft generation also runs on the `ai` queue so the interview remains responsive; its worker timeout must exceed `operations.timeout_seconds × quiz chain length + 15`, and database-queue `DB_QUEUE_RETRY_AFTER` must be longer than that worker timeout (the documented two-entry-chain defaults are 400 and 415 seconds). Do not run a worker with a lease shorter than the expected provider call without configuring a suitable heartbeat/lease policy. A recovered job fences stale completion writes; external providers are not generally exactly-once, so production providers should also use their own supported idempotency mechanism where available.
 
 Before production: use a supervised queue process, durable queue/database, TLS, a configured `APP_URL`, secure cookies, key rotation/backups, secret management, Mailgun webhook verification, monitoring for failed jobs and recovery counters, and retention/PII policies appropriate to your jurisdiction. Do not rely on `php artisan serve`, SQLite, or the database queue for high-volume production without an explicit capacity/backup decision. Full production checklist: [docs/SETUP.md](docs/SETUP.md#10-production-checklist-summary).
 

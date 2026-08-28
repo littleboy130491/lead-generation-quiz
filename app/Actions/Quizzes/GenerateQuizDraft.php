@@ -27,8 +27,12 @@ class GenerateQuizDraft
         array $brief,
         ?Closure $beforePersist = null,
         ?Closure $afterPersist = null,
+        ?array $sourceQuizSnapshot = null,
     ): Quiz {
         $brief = $this->safeBrief($brief);
+        if ($sourceQuizSnapshot !== null) {
+            $brief['existing_quiz'] = $this->safeSourceQuizSnapshot($sourceQuizSnapshot);
+        }
         $prompts = $this->settings->get('prompts');
         $chain = $this->settings->get('ai.quiz');
         $systemPrompt = $this->prompt->compose((string) $prompts['quiz_template']);
@@ -95,5 +99,25 @@ class GenerateQuizDraft
             'question_count' => isset($brief['question_count']) ? (int) $brief['question_count'] : null,
             'tone' => $brief['tone'] ?? null,
         ], static fn (mixed $value): bool => $value !== null && $value !== '');
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     * @return array{name: string, description: ?string, draft_definition: array<string, mixed>}
+     */
+    private function safeSourceQuizSnapshot(array $snapshot): array
+    {
+        $definition = $snapshot['draft_definition'] ?? null;
+        if (! is_array($definition)) {
+            throw new \InvalidArgumentException('The existing quiz context must contain a draft definition.');
+        }
+
+        return [
+            'name' => mb_substr(trim(strip_tags((string) ($snapshot['name'] ?? ''))), 0, 255),
+            'description' => filled($snapshot['description'] ?? null)
+                ? mb_substr(trim(strip_tags((string) $snapshot['description'])), 0, 4000)
+                : null,
+            'draft_definition' => $definition,
+        ];
     }
 }

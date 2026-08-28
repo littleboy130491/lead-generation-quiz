@@ -143,7 +143,7 @@ Open `/admin/login`, sign in, and confirm:
 Queue workers are required for AI analysis and report email:
 
 ```bash
-php artisan queue:work --queue=default,ai,mail --tries=1 --timeout=180
+php artisan queue:work --queue=default,ai,mail --tries=1 --timeout=400
 # optional local scheduler:
 php artisan schedule:work
 ```
@@ -198,36 +198,36 @@ More detail: [ADMIN_SETTINGS.md](ADMIN_SETTINGS.md).
 
 ### Request and worker timeouts for AI generation
 
-AI quiz interview turns and `POST /api/v1/quizzes/generate` call the provider inside the web request. Administrator quiz-draft generation is queued on `ai`; keep a supervised worker running or the chat will remain in `generating`. Each attempt is allowed `operations.timeout_seconds` (Operational settings, default 60), and a chain is tried in order, so the worst case is `timeout_seconds × chain length + 15` seconds. Web-server and PHP-FPM limits must cover synchronous paths, while the queue worker timeout must exceed that worst case.
+AI quiz interview turns and `POST /api/v1/quizzes/generate` call the provider inside the web request. Administrator quiz-draft generation is queued on `ai`; keep a supervised worker running or the chat will remain in `generating`. Each attempt is allowed `operations.timeout_seconds` (Operational settings, default 180), and a chain is tried in order, so the worst case is `timeout_seconds × chain length + 15` seconds. Web-server and PHP-FPM limits must cover synchronous paths, while the queue worker timeout must exceed that worst case.
 
-With a default 60-second timeout and a two-entry chain, allow at least 135 seconds:
+With the default 180-second timeout and a two-entry chain, allow at least 375 seconds:
 
 ```nginx
 # nginx server block, inside location ~ \.php$
-fastcgi_read_timeout 180;
+fastcgi_read_timeout 400;
 ```
 
 ```ini
 ; /etc/php/8.4/fpm/pool.d/www.conf
-request_terminate_timeout = 180
+request_terminate_timeout = 400
 ```
 
 ```ini
 ; /etc/php/8.4/fpm/php.ini — must be at least timeout_seconds × chain length + 15
-max_execution_time = 180
+max_execution_time = 400
 ```
 
 Some managed hosts list `set_time_limit` in `disable_functions`. The application skips the call there, so `max_execution_time` in `php.ini` becomes the only limit that matters and must be raised to the full value above. Check with `php -i | grep disable_functions`.
 
 Reload after editing: `sudo systemctl reload php8.4-fpm nginx`.
 
-Run the AI worker with a timeout above the provider-chain maximum. For the two-entry, 60-second example:
+Run the AI worker with a timeout above the provider-chain maximum. For the two-entry, 180-second default:
 
 ```bash
-php artisan queue:work --queue=ai,default,mail --tries=1 --timeout=180
+php artisan queue:work --queue=ai,default,mail --tries=1 --timeout=400
 ```
 
-For the database queue, `DB_QUEUE_RETRY_AFTER` must be greater than the worker timeout. The repository default is 195 seconds for the command above. Increase both values together if the quiz chain or per-attempt timeout grows.
+For the database queue, `DB_QUEUE_RETRY_AFTER` must be greater than the worker timeout. The repository default is 415 seconds for the command above. Increase both values together if the quiz chain or per-attempt timeout grows.
 
 ### Diagnosing a slow or failing generation
 

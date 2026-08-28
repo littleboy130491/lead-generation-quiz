@@ -6,6 +6,7 @@ use App\Actions\Quizzes\RunQuizDiscovery;
 use App\Actions\Quizzes\StopQuizDraftGeneration;
 use App\Ai\Discovery\QuizDiscoveryBrief;
 use App\Ai\Discovery\QuizDiscoveryIntent;
+use App\Enums\QuizDiscoveryMode;
 use App\Enums\QuizDiscoveryStatus;
 use App\Enums\QuizStatus;
 use App\Filament\Resources\Quizzes\Pages\EditQuiz;
@@ -14,6 +15,7 @@ use App\Models\Quiz;
 use App\Models\QuizDiscoverySession;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 class QuizDiscoveryChat extends Component
@@ -22,7 +24,11 @@ class QuizDiscoveryChat extends Component
 
     public ?int $quizId = null;
 
+    #[Locked]
     public ?int $originQuizId = null;
+
+    #[Locked]
+    public string $mode = 'create';
 
     public string $opening = '';
 
@@ -39,9 +45,13 @@ class QuizDiscoveryChat extends Component
 
     public function mount(): void
     {
+        $this->mode = $this->mode === QuizDiscoveryMode::Edit->value
+            ? QuizDiscoveryMode::Edit->value
+            : QuizDiscoveryMode::Create->value;
         $this->originQuizId = $this->quizId;
         $query = QuizDiscoverySession::query()
             ->where('user_id', auth()->id())
+            ->where('mode', $this->mode)
             ->whereIn('status', [
                 QuizDiscoveryStatus::Interviewing,
                 QuizDiscoveryStatus::Ready,
@@ -81,8 +91,11 @@ class QuizDiscoveryChat extends Component
         }
 
         $this->validate(['opening' => ['required', 'string', 'max:4000']]);
-        $session = app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening);
-        if ($this->originQuizId !== null) {
+        $sourceQuiz = $this->mode === QuizDiscoveryMode::Edit->value
+            ? Quiz::query()->findOrFail($this->originQuizId)
+            : null;
+        $session = app(RunQuizDiscovery::class)->start((int) auth()->id(), $this->opening, $sourceQuiz);
+        if ($sourceQuiz === null && $this->originQuizId !== null) {
             $session->update(['quiz_id' => $this->originQuizId]);
         }
         $this->loadSession($session->fresh(['messages']) ?? $session);
@@ -131,7 +144,9 @@ class QuizDiscoveryChat extends Component
     {
         $session = $this->session();
         $brief = QuizDiscoveryBrief::merge([], $this->brief ?: ($session?->brief ?? []));
-        if ($session === null || ! QuizDiscoveryBrief::hasEnoughContext($brief)) {
+        $hasExistingEditContext = $session?->mode === QuizDiscoveryMode::Edit
+            && $session->source_quiz_snapshot !== null;
+        if ($session === null || (! QuizDiscoveryBrief::hasEnoughContext($brief) && ! $hasExistingEditContext)) {
             Notification::make()->danger()->title('Tell me a bit more about the quiz before I can create it.')->send();
 
             return;
@@ -141,12 +156,17 @@ class QuizDiscoveryChat extends Component
             return;
         }
 
+        if ($session->mode === QuizDiscoveryMode::Edit && ! in_array($session->status, [QuizDiscoveryStatus::Ready, QuizDiscoveryStatus::Failed, QuizDiscoveryStatus::Cancelled], true)) {
+            return;
+        }
+
         try {
-            $quiz = $this->quizForGeneration($brief);
+            $quiz = $this->quizForGeneration($brief, $session);
             $executionToken = (string) Str::uuid();
             $claimed = QuizDiscoverySession::query()
                 ->whereKey($session->id)
                 ->where('user_id', auth()->id())
+                ->where('mode', $this->mode)
                 ->whereIn('status', [
                     QuizDiscoveryStatus::Interviewing,
                     QuizDiscoveryStatus::Ready,
@@ -172,10 +192,13 @@ class QuizDiscoveryChat extends Component
             }
 
             $session = $session->fresh(['messages']) ?? $session;
-            if ($session->messages->last()?->content !== RunQuizDiscovery::GENERATION_REQUESTED_MESSAGE) {
+            $requestedMessage = $session->mode === QuizDiscoveryMode::Edit
+                ? RunQuizDiscovery::UPDATE_REQUESTED_MESSAGE
+                : RunQuizDiscovery::GENERATION_REQUESTED_MESSAGE;
+            if ($session->messages->last()?->content !== $requestedMessage) {
                 $session->messages()->create([
                     'role' => 'assistant',
-                    'content' => RunQuizDiscovery::GENERATION_REQUESTED_MESSAGE,
+                    'content' => $requestedMessage,
                     'brief_snapshot' => $brief,
                 ]);
             }
@@ -233,18 +256,35 @@ class QuizDiscoveryChat extends Component
 
     public function session(): ?QuizDiscoverySession
     {
-        return $this->sessionId === null ? null : QuizDiscoverySession::query()
+        if ($this->sessionId === null) {
+            return null;
+        }
+
+        $query = QuizDiscoverySession::query()
             ->whereKey($this->sessionId)
             ->where('user_id', auth()->id())
-            ->with('messages')
-            ->first();
+            ->where('mode', $this->mode);
+        if ($this->mode === QuizDiscoveryMode::Edit->value) {
+            $query->where('quiz_id', $this->originQuizId);
+        }
+
+        return $query->with('messages')->first();
     }
 
     /**
      * @param  array<string, mixed>  $brief
      */
-    private function quizForGeneration(array $brief): Quiz
+    private function quizForGeneration(array $brief, QuizDiscoverySession $session): Quiz
     {
+        if ($session->mode === QuizDiscoveryMode::Edit) {
+            $quiz = Quiz::query()->find($session->quiz_id);
+            if ($quiz === null || $quiz->id !== $this->originQuizId) {
+                throw new \RuntimeException('The existing quiz for this edit interview could not be found.');
+            }
+
+            return $quiz;
+        }
+
         if ($this->quizId !== null) {
             $quiz = Quiz::query()->find($this->quizId);
             if ($quiz === null) {
@@ -274,6 +314,7 @@ class QuizDiscoveryChat extends Component
     {
         $this->sessionId = $session->id;
         $this->brief = $session->brief ?? [];
+        $this->mode = $session->mode->value;
         $this->generationStatus = $session->status->value;
         $this->quizId = $session->quiz_id ?? $this->quizId;
         $this->generatedQuizUrl = $session->status === QuizDiscoveryStatus::Generated && $session->quiz_id !== null

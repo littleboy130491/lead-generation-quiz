@@ -13,6 +13,8 @@ class QuizDiscoveryIntentTest extends TestCase
             'execute now',
             'Please generate the quiz',
             'create the quiz now.',
+            'update the quiz now',
+            'replace the quiz draft',
             "that's enough",
             'go ahead',
         ] as $message) {

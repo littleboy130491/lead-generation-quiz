@@ -18,7 +18,7 @@ class ApplicationSettings
         'report.email' => ['subject' => 'Your quiz report', 'html' => '<h1>{{report.executive_summary}}</h1>', 'text' => '{{report.executive_summary}}'],
         'design' => ['tokens' => [], 'additional_css' => ''],
         'spam' => ['turnstile_enabled' => false, 'analysis_mode' => 'always'],
-        'operations' => ['resume_days' => 30, 'retention_days' => 90, 'retry_attempts' => 3, 'timeout_seconds' => 60],
+        'operations' => ['resume_days' => 30, 'retention_days' => 90, 'retry_attempts' => 3, 'timeout_seconds' => 180],
         'notifications' => ['submission_emails' => []],
     ];
 

@@ -6,7 +6,9 @@ use App\Ai\Discovery\QuizDiscoveryBrief;
 use App\Ai\Discovery\QuizDiscoveryIntent;
 use App\Ai\Discovery\QuizDiscoveryInterviewer;
 use App\Ai\Discovery\QuizDiscoveryPrompt;
+use App\Enums\QuizDiscoveryMode;
 use App\Enums\QuizDiscoveryStatus;
+use App\Models\Quiz;
 use App\Models\QuizDiscoverySession;
 use App\Settings\ApplicationSettings;
 use Illuminate\Support\Facades\Cache;
@@ -24,20 +26,26 @@ class RunQuizDiscovery
 
     public const GENERATION_REQUESTED_MESSAGE = QuizDiscoveryPrompt::GENERATION_REQUESTED_MESSAGE;
 
+    public const UPDATE_REQUESTED_MESSAGE = QuizDiscoveryPrompt::UPDATE_REQUESTED_MESSAGE;
+
     public function __construct(
         private QuizDiscoveryInterviewer $interviewer,
         private ApplicationSettings $settings,
     ) {}
 
-    public function start(int $userId, string $opening): QuizDiscoverySession
+    public function start(int $userId, string $opening, ?Quiz $sourceQuiz = null): QuizDiscoverySession
     {
         $prompts = $this->settings->get('prompts');
         $template = (string) ($prompts['discovery_template'] ?? QuizDiscoveryPrompt::DEFAULT_TEMPLATE);
+        $mode = $sourceQuiz === null ? QuizDiscoveryMode::Create : QuizDiscoveryMode::Edit;
         $session = QuizDiscoverySession::create([
             'user_id' => $userId,
+            'quiz_id' => $sourceQuiz?->id,
+            'mode' => $mode,
             'status' => QuizDiscoveryStatus::Interviewing,
             'brief' => [],
-            'system_prompt_snapshot' => trim($template)."\n\n".QuizDiscoveryPrompt::TURN_CONTRACT,
+            'source_quiz_snapshot' => $sourceQuiz === null ? null : $this->sourceQuizSnapshot($sourceQuiz),
+            'system_prompt_snapshot' => trim($template)."\n\n".QuizDiscoveryPrompt::TURN_CONTRACT.($mode === QuizDiscoveryMode::Edit ? "\n\n".QuizDiscoveryPrompt::EDIT_TURN_CONTRACT : ''),
         ]);
 
         return $this->reply($session, $opening);
@@ -65,9 +73,9 @@ class RunQuizDiscovery
         $session->messages()->create(['role' => 'user', 'content' => mb_substr($message, 0, 4000)]);
         $brief = $session->brief ?? [];
         if (QuizDiscoveryIntent::wantsImmediateGeneration($message)) {
-            $ready = QuizDiscoveryBrief::hasEnoughContext($brief);
+            $ready = $this->hasEnoughContext($session, $brief);
             $assistantMessage = $ready
-                ? self::GENERATION_REQUESTED_MESSAGE
+                ? $this->generationRequestedMessage($session)
                 : 'Tell me a bit more about the quiz you want before I create it. What is the core idea?';
             $session->update([
                 'brief' => $brief,
@@ -90,6 +98,12 @@ class RunQuizDiscovery
             ->map(fn ($item) => $item->only(['role', 'content']))
             ->values()
             ->all();
+        if ($session->mode === QuizDiscoveryMode::Edit && $session->source_quiz_snapshot !== null) {
+            array_unshift($history, [
+                'role' => 'user',
+                'content' => '<untrusted_existing_quiz>'.json_encode($session->source_quiz_snapshot, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).'</untrusted_existing_quiz>',
+            ]);
+        }
         $response = $this->interviewer->respond($brief, $history, $session->system_prompt_snapshot);
         $brief = QuizDiscoveryBrief::merge($brief, $response['brief']);
         if ($brief === [] && $message !== '' && ! QuizDiscoveryIntent::wantsImmediateGeneration($message)) {
@@ -101,12 +115,14 @@ class RunQuizDiscovery
             : 'continue';
         $assistantMessage = (string) $response['message'];
 
-        if ($action === 'generate' && ! QuizDiscoveryBrief::hasEnoughContext($brief)) {
+        if ($action === 'generate' && ! $this->hasEnoughContext($session, $brief)) {
             $action = 'continue';
             $assistantMessage = 'Tell me a bit more about the quiz you want before I create it. What is the core idea?';
         }
 
-        $ready = $action === 'generate' || QuizDiscoveryBrief::isReady($brief);
+        $ready = $session->mode === QuizDiscoveryMode::Edit
+            ? $action === 'generate'
+            : ($action === 'generate' || QuizDiscoveryBrief::isReady($brief));
 
         $session->update([
             'brief' => $brief,
@@ -119,5 +135,31 @@ class RunQuizDiscovery
         ]);
 
         return $session->fresh(['messages']) ?? $session;
+    }
+
+    /** @return array{name: string, description: ?string, draft_definition: array<string, mixed>} */
+    private function sourceQuizSnapshot(Quiz $quiz): array
+    {
+        return [
+            'name' => $quiz->name,
+            'description' => $quiz->description,
+            'draft_definition' => is_array($quiz->draft_definition)
+                ? $quiz->draft_definition
+                : ['schema_version' => 1, 'blocks' => []],
+        ];
+    }
+
+    /** @param array<string, mixed> $brief */
+    private function hasEnoughContext(QuizDiscoverySession $session, array $brief): bool
+    {
+        return QuizDiscoveryBrief::hasEnoughContext($brief)
+            || ($session->mode === QuizDiscoveryMode::Edit && $session->source_quiz_snapshot !== null);
+    }
+
+    private function generationRequestedMessage(QuizDiscoverySession $session): string
+    {
+        return $session->mode === QuizDiscoveryMode::Edit
+            ? self::UPDATE_REQUESTED_MESSAGE
+            : self::GENERATION_REQUESTED_MESSAGE;
     }
 }

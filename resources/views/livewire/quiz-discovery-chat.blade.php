@@ -1,4 +1,5 @@
-<div class="quiz-chat" aria-label="AI quiz interview">
+@php($isEditing = $mode === 'edit')
+<div class="quiz-chat" aria-label="{{ $isEditing ? 'Edit quiz with AI' : 'AI quiz interview' }}">
     <style>
         .quiz-chat { --qc-ink:var(--quiz-chat-ink,#172033); --qc-muted:var(--quiz-chat-muted,#697386); --qc-line:var(--quiz-chat-line,#e6e9ef); --qc-surface:var(--quiz-chat-surface,#f7f8fa); --qc-canvas:var(--quiz-chat-canvas,#ffffff); --qc-brand:var(--quiz-chat-primary-600,#d97706); --qc-brand-dark:var(--quiz-chat-primary-700,#b45309); --qc-brand-soft:var(--quiz-chat-primary-50,#fffbeb); color:var(--qc-ink); font-family:inherit; }
         .quiz-chat *, .quiz-chat *::before, .quiz-chat *::after { box-sizing:border-box; }
@@ -21,9 +22,24 @@
         .quiz-chat__message--user { justify-content:flex-end; }
         .quiz-chat__bubble { max-width:min(82%,560px); padding:13px 16px; border-radius:18px; background:#fff; border:1px solid var(--qc-line); box-shadow:0 1px 1px rgba(23,32,51,.03); font-size:15px; line-height:1.55; white-space:pre-wrap; }
         .quiz-chat__message--user .quiz-chat__bubble { border-color:var(--qc-brand); background:var(--qc-brand); color:#fff; border-bottom-right-radius:5px; }
-        .quiz-chat__message--assistant .quiz-chat__bubble { border-bottom-left-radius:5px; }
+        .quiz-chat__message--assistant .quiz-chat__bubble { border-bottom-left-radius:5px; white-space:normal; }
         .quiz-chat__sender { display:block; margin:0 0 5px; color:var(--qc-muted); font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
         .quiz-chat__message--user .quiz-chat__sender { color:rgba(255,255,255,.7); }
+        .quiz-chat__markdown { overflow-wrap:anywhere; }
+        .quiz-chat__markdown > :first-child { margin-top:0; }
+        .quiz-chat__markdown > :last-child { margin-bottom:0; }
+        .quiz-chat__markdown p { margin:0 0:.75em; }
+        .quiz-chat__markdown h1,.quiz-chat__markdown h2,.quiz-chat__markdown h3,.quiz-chat__markdown h4 { margin:1em 0 .45em; font-weight:750; line-height:1.25; letter-spacing:-.015em; }
+        .quiz-chat__markdown h1 { font-size:1.35em; }.quiz-chat__markdown h2 { font-size:1.22em; }.quiz-chat__markdown h3,.quiz-chat__markdown h4 { font-size:1.08em; }
+        .quiz-chat__markdown ul,.quiz-chat__markdown ol { margin:.45em 0 .8em; padding-left:1.35em; }
+        .quiz-chat__markdown li + li { margin-top:.25em; }
+        .quiz-chat__markdown a { color:var(--qc-brand-dark); font-weight:650; text-decoration:underline; text-underline-offset:2px; }
+        .quiz-chat__markdown blockquote { margin:.75em 0; padding:.15em 0 .15em .9em; border-left:3px solid var(--qc-line); color:var(--qc-muted); }
+        .quiz-chat__markdown code { padding:.12em .32em; border-radius:5px; background:var(--qc-surface); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:.9em; }
+        .quiz-chat__markdown pre { max-width:100%; margin:.75em 0; padding:12px; overflow-x:auto; border-radius:10px; background:var(--qc-ink); color:#fff; white-space:pre; }
+        .quiz-chat__markdown pre code { padding:0; background:transparent; color:inherit; }
+        .quiz-chat__markdown table { display:block; max-width:100%; margin:.75em 0; overflow-x:auto; border-collapse:collapse; }
+        .quiz-chat__markdown th,.quiz-chat__markdown td { padding:6px 9px; border:1px solid var(--qc-line); text-align:left; }
         .quiz-chat__composer { display:flex; gap:10px; align-items:flex-end; padding:16px clamp(18px,4vw,64px); border-top:1px solid var(--qc-line); background:#fff; }
         .quiz-chat__textarea { width:100%; min-height:52px; max-height:132px; padding:14px 15px; border:1px solid #cfd5df; border-radius:15px; outline:none; resize:vertical; color:var(--qc-ink); background:#fff; font:inherit; font-size:15px; line-height:1.45; }
         .quiz-chat__textarea:focus { border-color:var(--qc-brand); box-shadow:0 0 0 3px rgb(var(--quiz-chat-primary-rgb, 217 119 6) / .18); }
@@ -86,13 +102,13 @@
         <header class="quiz-chat__header">
             <div class="quiz-chat__identity">
                 <div class="quiz-chat__avatar">AI</div>
-                <div><p class="quiz-chat__title">Quiz assistant</p><p class="quiz-chat__subtitle">Chat to shape the quiz. Say create the quiz now when you are ready.</p></div>
+                <div><p class="quiz-chat__title">Quiz assistant</p><p class="quiz-chat__subtitle">{{ $isEditing ? 'Review the existing draft, discuss improvements, then update only when you approve.' : 'Chat to shape the quiz. Say create the quiz now when you are ready.' }}</p></div>
             </div>
             @if ($sessionId !== null)
                 <div class="quiz-chat__header-actions">
                     <button class="quiz-chat__review" type="button" wire:click="startNewInterview" @disabled($generationStatus === 'generating')>New interview</button>
-                    @if (in_array($generationStatus, ['interviewing', 'ready'], true))
-                        <button class="quiz-chat__create" type="button" wire:click="executeNow" wire:loading.attr="disabled">Create quiz now</button>
+                    @if ((! $isEditing && in_array($generationStatus, ['interviewing', 'ready'], true)) || ($isEditing && $generationStatus === 'ready'))
+                        <button class="quiz-chat__create" type="button" wire:click="executeNow" wire:loading.attr="disabled">{{ $isEditing ? 'Update quiz' : 'Create quiz now' }}</button>
                     @endif
                     <button class="quiz-chat__review" type="button" wire:click="$toggle('showBrief')" @disabled($generationStatus === 'generating')>{{ $showBrief ? 'Back to chat' : 'Review brief' }}</button>
                 </div>
@@ -103,7 +119,7 @@
             @if ($showBrief)
                 <section class="quiz-chat__brief">
                     <h2>Review the quiz brief</h2>
-                    <p>Edit these details before creating the draft. The conversation itself is never passed directly into generation. You can also say create the quiz now from chat.</p>
+                    <p>{{ $isEditing ? 'Edit the requested outcome before replacing the draft. The snapshotted existing quiz and this reviewed brief are sent as separate untrusted context.' : 'Edit these details before creating the draft. The conversation itself is never passed directly into generation. You can also say create the quiz now from chat.' }}</p>
                     <div class="quiz-chat__brief-editor">
                         <div class="quiz-chat__fields">
                             <div class="quiz-chat__field quiz-chat__field--wide"><label for="brief-context">Business context</label><textarea id="brief-context" wire:model="brief.business_context" rows="3"></textarea></div>
@@ -113,14 +129,23 @@
                             <div class="quiz-chat__field"><label for="brief-count">Number of questions</label><input id="brief-count" type="number" min="1" max="30" wire:model="brief.question_count" /></div>
                             <div class="quiz-chat__field"><label for="brief-tone">Tone</label><input id="brief-tone" wire:model="brief.tone" /></div>
                         </div>
-                        <div class="quiz-chat__actions"><button class="quiz-chat__action-button quiz-chat__save" type="button" wire:click="saveBrief" wire:loading.attr="disabled">Save changes</button><button class="quiz-chat__action-button" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Generate draft</button></div>
+                        <div class="quiz-chat__actions"><button class="quiz-chat__action-button quiz-chat__save" type="button" wire:click="saveBrief" wire:loading.attr="disabled">Save changes</button>@if (! $isEditing || $generationStatus === 'ready')<button class="quiz-chat__action-button" type="button" wire:click="generateDraft" wire:loading.attr="disabled">{{ $isEditing ? 'Update quiz' : 'Generate draft' }}</button>@endif</div>
                     </div>
                 </section>
             @elseif ($sessionId === null)
-                <div class="quiz-chat__welcome"><h2>What quiz do you want to create?</h2><p>Tell me the rough idea. I will ask only what is needed, and you can say create the quiz now whenever you want a draft.</p></div>
+                <div class="quiz-chat__welcome"><h2>{{ $isEditing ? 'How should this quiz improve?' : 'What quiz do you want to create?' }}</h2><p>{{ $isEditing ? 'The assistant will receive a snapshot of the existing draft. Describe what should change, then review its recommendation before updating.' : 'Tell me the rough idea. I will ask only what is needed, and you can say create the quiz now whenever you want a draft.' }}</p></div>
             @else
                 @foreach ($this->session()?->messages ?? [] as $message)
-                    <article class="quiz-chat__message quiz-chat__message--{{ $message->role === 'assistant' ? 'assistant' : 'user' }}"><div class="quiz-chat__bubble">@if ($message->role === 'assistant')<span class="quiz-chat__sender">Quiz assistant</span>@endif{{ $message->content }}</div></article>
+                    <article class="quiz-chat__message quiz-chat__message--{{ $message->role === 'assistant' ? 'assistant' : 'user' }}">
+                        <div class="quiz-chat__bubble">
+                            @if ($message->role === 'assistant')
+                                <span class="quiz-chat__sender">Quiz assistant</span>
+                                <div class="quiz-chat__markdown">{!! \Illuminate\Support\Str::markdown($message->content, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}</div>
+                            @else
+                                {{ $message->content }}
+                            @endif
+                        </div>
+                    </article>
                 @endforeach
             @endif
             <template x-if="pending">
@@ -133,13 +158,13 @@
 
         @if ($generationStatus === 'generating')
             <aside class="quiz-chat__generation" aria-live="polite">
-                <div class="quiz-chat__generation-copy"><span class="quiz-chat__generation-spinner" aria-hidden="true"></span><div><strong>Generating your quiz draft</strong><span>You can leave this chat and come back. The AI worker will continue in the background.</span></div></div>
+                <div class="quiz-chat__generation-copy"><span class="quiz-chat__generation-spinner" aria-hidden="true"></span><div><strong>{{ $isEditing ? 'Updating your quiz draft' : 'Generating your quiz draft' }}</strong><span>You can leave this chat and come back. The AI worker will continue in the background.</span></div></div>
                 <button class="quiz-chat__generation-link quiz-chat__generation-stop" type="button" wire:click="stopGeneration" wire:loading.attr="disabled" wire:target="stopGeneration"><span wire:loading.remove wire:target="stopGeneration">Stop generation</span><span wire:loading wire:target="stopGeneration">Stopping…</span></button>
             </aside>
         @elseif ($generationStatus === 'generated' && $generatedQuizUrl)
             <aside class="quiz-chat__generation quiz-chat__generation--complete" aria-live="polite">
-                <div class="quiz-chat__generation-copy"><div><strong>Your quiz draft is ready</strong><span>Review the questions and presentation before publishing.</span></div></div>
-                <a class="quiz-chat__generation-link" href="{{ $generatedQuizUrl }}" wire:navigate>Review and edit quiz</a>
+                <div class="quiz-chat__generation-copy"><div><strong>{{ $isEditing ? 'Quiz draft updated' : 'Your quiz draft is ready' }}</strong><span>Review the questions and presentation before publishing.</span></div></div>
+                <a class="quiz-chat__generation-link" href="{{ $generatedQuizUrl }}" wire:navigate>{{ $isEditing ? 'Review updated quiz' : 'Review and edit quiz' }}</a>
             </aside>
         @elseif ($generationStatus === 'failed')
             <aside class="quiz-chat__generation quiz-chat__generation--failed" aria-live="polite">
@@ -167,8 +192,8 @@
                     x-on:keydown.enter="if (! $event.shiftKey && ! $event.isComposing) { $event.preventDefault(); send() }"
                     rows="2"
                     title="Enter sends. Shift + Enter adds a new line."
-                    aria-label="{{ $sessionId === null ? 'Describe the quiz you want to create' : 'Write your answer' }}"
-                    placeholder="{{ $sessionId === null ? 'Describe the quiz you want to create…' : 'Write a reply, or say create the quiz now…' }}"
+                    aria-label="{{ $sessionId === null ? ($isEditing ? 'Describe how the quiz should change' : 'Describe the quiz you want to create') : 'Write your answer' }}"
+                    placeholder="{{ $sessionId === null ? ($isEditing ? 'Describe what you want to improve…' : 'Describe the quiz you want to create…') : ($isEditing ? 'Write a reply, or say update the quiz now…' : 'Write a reply, or say create the quiz now…') }}"
                 ></textarea>
                 <button class="quiz-chat__send" type="button" x-on:click="send()" x-bind:disabled="! draft.trim() || sending" aria-label="{{ $sessionId === null ? 'Start chat' : 'Send message' }}" title="{{ $sessionId === null ? 'Start chat' : 'Send message' }}">
                     <svg x-show="! sending" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 2.7 3 10.1c-.9.4-.9 1.7.1 2l7.1 2.3 2.3 7.1c.3 1 1.6 1 2 .1l7.4-18.5c.3-.7-.4-1.4-1.1-1.1ZM11.2 13.1l-1.4 5-1.2-3.7-3.7-1.2 12.9-5.1-6.7 5Z" /></svg>

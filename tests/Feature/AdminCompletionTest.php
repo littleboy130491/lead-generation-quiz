@@ -83,6 +83,11 @@ class AdminCompletionTest extends TestCase
         $this->assertStringContainsString('Do not invent facts', $template);
     }
 
+    public function test_application_settings_default_to_a_180_second_ai_timeout(): void
+    {
+        $this->assertSame(180, app(ApplicationSettings::class)->operation('timeout_seconds'));
+    }
+
     public function test_application_settings_persist_non_secret_configuration_and_reject_secret_keys(): void
     {
         $settings = app(ApplicationSettings::class);

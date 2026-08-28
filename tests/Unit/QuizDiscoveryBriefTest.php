@@ -33,4 +33,21 @@ class QuizDiscoveryBriefTest extends TestCase
         $this->assertFalse(QuizDiscoveryBrief::isReady($brief));
         $this->assertFalse(QuizDiscoveryBrief::hasEnoughContext([]));
     }
+
+    public function test_an_unspecified_question_count_is_not_converted_into_one_question(): void
+    {
+        $brief = QuizDiscoveryBrief::merge([], [
+            'business_context' => 'A nutrition coaching quiz',
+            'question_count' => 0,
+        ]);
+
+        $this->assertArrayNotHasKey('question_count', $brief);
+    }
+
+    public function test_a_valid_explicit_question_count_is_preserved(): void
+    {
+        $brief = QuizDiscoveryBrief::merge([], ['question_count' => 8]);
+
+        $this->assertSame(8, $brief['question_count']);
+    }
 }

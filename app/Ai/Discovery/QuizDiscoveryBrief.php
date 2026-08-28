@@ -24,14 +24,19 @@ final class QuizDiscoveryBrief
         $brief = [];
 
         foreach (self::FIELDS as $field => $maximum) {
-            $value = $candidate[$field] ?? $current[$field] ?? null;
-            if ($value === null || $value === '') {
+            if ($field === 'question_count') {
+                $questionCount = self::questionCount($candidate[$field] ?? null)
+                    ?? self::questionCount($current[$field] ?? null);
+
+                if ($questionCount !== null) {
+                    $brief[$field] = $questionCount;
+                }
+
                 continue;
             }
 
-            if ($field === 'question_count') {
-                $brief[$field] = max(1, min(30, (int) $value));
-
+            $value = $candidate[$field] ?? $current[$field] ?? null;
+            if ($value === null || $value === '') {
                 continue;
             }
 
@@ -43,6 +48,17 @@ final class QuizDiscoveryBrief
         }
 
         return $brief;
+    }
+
+    private static function questionCount(mixed $value): ?int
+    {
+        if (filter_var($value, FILTER_VALIDATE_INT) === false) {
+            return null;
+        }
+
+        $count = (int) $value;
+
+        return $count >= 1 && $count <= 30 ? $count : null;
     }
 
     /** @param array<string, mixed> $brief */

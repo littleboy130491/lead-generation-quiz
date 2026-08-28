@@ -174,7 +174,7 @@ class OperationalSettings extends Page
                     'resume_days' => (int) ($data['operations']['resume_days'] ?? 30),
                     'retention_days' => (int) ($data['operations']['retention_days'] ?? 90),
                     'retry_attempts' => (int) ($data['operations']['retry_attempts'] ?? 3),
-                    'timeout_seconds' => (int) ($data['operations']['timeout_seconds'] ?? 60),
+                    'timeout_seconds' => (int) ($data['operations']['timeout_seconds'] ?? 180),
                 ]);
                 $settings->put('notifications', [
                     'submission_emails' => array_values($data['notifications']['submission_emails'] ?? []),

@@ -18,5 +18,9 @@ class QuizDefinitionPromptTest extends TestCase
         $this->assertStringContainsString('single_choice', $prompt);
         $this->assertStringContainsString('page_break', $prompt);
         $this->assertStringContainsString('Do not include Markdown fences', $prompt);
+        $this->assertStringContainsString('When question_count is absent', $prompt);
+        $this->assertStringContainsString('determine the ideal number of questions', $prompt);
+        $this->assertStringContainsString('existing_quiz', $prompt);
+        $this->assertStringContainsString('one complete replacement V1 definition', $prompt);
     }
 }

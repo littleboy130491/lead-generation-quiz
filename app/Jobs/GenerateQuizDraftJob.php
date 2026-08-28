@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Actions\Quizzes\GenerateQuizDraft;
 use App\Ai\GenerationException;
+use App\Enums\QuizDiscoveryMode;
 use App\Enums\QuizDiscoveryStatus;
 use App\Models\QuizDiscoverySession;
 use Illuminate\Bus\Queueable;
@@ -84,10 +85,15 @@ class GenerateQuizDraftJob implements ShouldQueue
                     ]);
                     $activeSession->messages()->create([
                         'role' => 'assistant',
-                        'content' => 'Your quiz draft is ready. Review it and make any changes before publishing.',
+                        'content' => $activeSession->mode === QuizDiscoveryMode::Edit
+                            ? 'Your quiz draft was updated. Review the complete replacement before publishing.'
+                            : 'Your quiz draft is ready. Review it and make any changes before publishing.',
                         'brief_snapshot' => $activeSession->brief,
                     ]);
                 },
+                sourceQuizSnapshot: $session->mode === QuizDiscoveryMode::Edit
+                    ? $session->source_quiz_snapshot
+                    : null,
             );
         } catch (\Throwable $exception) {
             report($exception);

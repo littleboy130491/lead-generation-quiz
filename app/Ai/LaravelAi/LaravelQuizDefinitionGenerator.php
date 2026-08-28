@@ -37,7 +37,7 @@ class LaravelQuizDefinitionGenerator implements QuizDefinitionGenerator
                     messages: [],
                     tools: [],
                     schema: fn (JsonSchema $schema) => QuizDefinitionJsonSchema::definition($schema),
-                ))->prompt('<untrusted_administrator_brief>'.json_encode($brief, JSON_THROW_ON_ERROR).'</untrusted_administrator_brief>', provider: Lab::from($entry['provider']), model: $entry['model'], timeout: $timeout);
+                ))->prompt('<untrusted_administrator_brief>'.json_encode($brief, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).'</untrusted_administrator_brief>', provider: Lab::from($entry['provider']), model: $entry['model'], timeout: $timeout);
 
                 return QuizDefinitionSanitizer::sanitize($response->toArray());
             } catch (\Throwable $exception) {

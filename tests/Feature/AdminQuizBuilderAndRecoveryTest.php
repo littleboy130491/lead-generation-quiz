@@ -64,7 +64,8 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->actingAs($user)
             ->get("/admin/quizzes/{$quiz->id}/edit")
             ->assertOk()
-            ->assertSee('AI quiz interview')
+            ->assertSee('Edit with AI')
+            ->assertDontSee('AI quiz interview')
             ->assertDontSee('Generate AI draft')
             ->assertSee('Settings')
             ->assertSee('Quiz')
@@ -75,7 +76,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
             ->assertDontSee('fi-width-7xl', false);
     }
 
-    public function test_create_and_edit_quiz_headers_offer_the_interview_instead_of_a_brief_form(): void
+    public function test_create_and_edit_quiz_headers_offer_distinct_ai_workflows(): void
     {
         $this->configureQuizAiProvider();
         $quiz = Quiz::factory()->create();
@@ -91,12 +92,14 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $edit = Livewire::actingAs(User::factory()->create())
             ->test(EditQuiz::class, ['record' => $quiz->id])
-            ->assertSee('AI quiz interview')
+            ->assertSee('Edit with AI')
+            ->assertDontSee('AI quiz interview')
             ->assertDontSee('Generate AI draft')
-            ->mountAction('quizDiscovery');
+            ->mountAction('editWithAi');
 
         $this->assertNotNull($edit->instance()->getMountedAction());
-        $this->assertStringContainsString('create the quiz now', (string) $edit->instance()->getMountedAction()->getModalDescription());
+        $this->assertStringContainsString('existing quiz', (string) $edit->instance()->getMountedAction()->getModalDescription());
+        $this->assertNotContains('quizDiscovery', collect($edit->instance()->getCachedHeaderActions())->map->getName()->all());
     }
 
     public function test_quiz_interview_action_is_disabled_without_configured_quiz_ai_credentials(): void
@@ -110,10 +113,17 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->assertTrue($action->isDisabled());
         $this->assertStringContainsString('Operational settings', (string) $action->getTooltip());
 
+        $quiz = Quiz::factory()->create();
+        $disabledEdit = Livewire::actingAs(User::factory()->create())->test(EditQuiz::class, ['record' => $quiz->id]);
+        $this->assertTrue($disabledEdit->instance()->getAction('editWithAi')->isDisabled());
+
         $this->configureQuizAiProvider();
 
         $enabled = Livewire::actingAs(User::factory()->create())->test(CreateQuiz::class);
         $this->assertFalse($enabled->instance()->getAction('quizDiscovery')->isDisabled());
+
+        $edit = Livewire::actingAs(User::factory()->create())->test(EditQuiz::class, ['record' => $quiz->id]);
+        $this->assertFalse($edit->instance()->getAction('editWithAi')->isDisabled());
     }
 
     private function configureQuizAiProvider(): void
