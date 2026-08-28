@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Actions\Quizzes\ReadQuizDiscoveryConversation;
 use App\Actions\Quizzes\RunQuizDiscovery;
 use App\Actions\Quizzes\StopQuizDraftGeneration;
 use App\Ai\Discovery\QuizDiscoveryBrief;
@@ -12,8 +13,10 @@ use App\Enums\QuizStatus;
 use App\Filament\Resources\Quizzes\Pages\EditQuiz;
 use App\Jobs\GenerateQuizDraftJob;
 use App\Models\Quiz;
+use App\Models\QuizDiscoveryMessage;
 use App\Models\QuizDiscoverySession;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -78,7 +81,16 @@ class QuizDiscoveryChat extends Component
             return;
         }
 
-        $session?->update(['status' => QuizDiscoveryStatus::Abandoned]);
+        if ($session !== null) {
+            QuizDiscoverySession::query()
+                ->whereIn('id', app(ReadQuizDiscoveryConversation::class)->sessionIds($session))
+                ->where('user_id', auth()->id())
+                ->where('status', '!=', QuizDiscoveryStatus::Generating)
+                ->update([
+                    'status' => QuizDiscoveryStatus::Abandoned,
+                    'updated_at' => now(),
+                ]);
+        }
         $this->quizId = $this->originQuizId;
         $this->reset('sessionId', 'opening', 'reply', 'brief', 'showBrief', 'generatedQuizUrl');
         $this->generationStatus = 'idle';
@@ -110,12 +122,17 @@ class QuizDiscoveryChat extends Component
 
         $this->validate(['reply' => ['required', 'string', 'max:4000']]);
         $session = $this->session();
-        if ($session === null || ! in_array($session->status, [QuizDiscoveryStatus::Interviewing, QuizDiscoveryStatus::Ready], true)) {
+        $continuesCompletedEdit = $session?->mode === QuizDiscoveryMode::Edit
+            && $session->status === QuizDiscoveryStatus::Generated;
+        if ($session === null || (! $continuesCompletedEdit && ! in_array($session->status, [QuizDiscoveryStatus::Interviewing, QuizDiscoveryStatus::Ready], true))) {
             return;
         }
 
         $wantsImmediateGeneration = QuizDiscoveryIntent::wantsImmediateGeneration($this->reply);
-        $this->loadSession(app(RunQuizDiscovery::class)->reply($session, $this->reply));
+        $nextSession = $continuesCompletedEdit
+            ? app(RunQuizDiscovery::class)->continueEdit($session, $this->reply)
+            : app(RunQuizDiscovery::class)->reply($session, $this->reply);
+        $this->loadSession($nextSession);
         $this->reset('reply');
 
         if ($wantsImmediateGeneration && $this->session()?->status === QuizDiscoveryStatus::Ready) {
@@ -269,6 +286,16 @@ class QuizDiscoveryChat extends Component
         }
 
         return $query->with('messages')->first();
+    }
+
+    /** @return Collection<int, QuizDiscoveryMessage> */
+    public function conversationMessages(): Collection
+    {
+        $session = $this->session();
+
+        return $session === null
+            ? collect()
+            : app(ReadQuizDiscoveryConversation::class)->messages($session);
     }
 
     /**

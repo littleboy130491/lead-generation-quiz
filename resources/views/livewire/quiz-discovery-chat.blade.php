@@ -12,7 +12,7 @@
         .quiz-chat__header-actions { display:flex; align-items:center; gap:4px; }
         .quiz-chat__review { border:0; background:transparent; color:var(--qc-brand); padding:8px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
         .quiz-chat__review:hover { text-decoration:underline; }
-        .quiz-chat__create { min-height:38px; padding:0 13px; border:0; border-radius:10px; background:var(--qc-brand); color:#fff; font:inherit; font-size:13px; font-weight:750; cursor:pointer; white-space:nowrap; }
+        .quiz-chat__create { min-height:42px; padding:0 15px; border:0; border-radius:11px; background:var(--qc-brand); color:#fff; font:inherit; font-size:13px; font-weight:750; cursor:pointer; white-space:nowrap; box-shadow:0 5px 14px rgb(var(--quiz-chat-primary-rgb,217 119 6) / .2); }
         .quiz-chat__create:hover { background:var(--qc-brand-dark); }.quiz-chat__create:disabled{cursor:not-allowed;opacity:.55}
         .quiz-chat__stream { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:28px clamp(18px,4vw,64px); background:var(--qc-surface); }
         .quiz-chat__welcome { max-width:580px; margin:10vh auto 0; text-align:center; }
@@ -20,11 +20,14 @@
         .quiz-chat__welcome p { max-width:480px; margin:14px auto 0; color:var(--qc-muted); font-size:15px; line-height:1.6; }
         .quiz-chat__message { display:flex; margin:0 auto 18px; max-width:720px; }
         .quiz-chat__message--user { justify-content:flex-end; }
-        .quiz-chat__bubble { max-width:min(82%,560px); padding:13px 16px; border-radius:18px; background:#fff; border:1px solid var(--qc-line); box-shadow:0 1px 1px rgba(23,32,51,.03); font-size:15px; line-height:1.55; white-space:pre-wrap; }
+        .quiz-chat__bubble { max-width:min(82%,560px); padding:13px 16px; border-radius:18px; background:#fff; border:1px solid var(--qc-line); box-shadow:0 1px 1px rgba(23,32,51,.03); font-size:15px; line-height:1.55; }
         .quiz-chat__message--user .quiz-chat__bubble { border-color:var(--qc-brand); background:var(--qc-brand); color:#fff; border-bottom-right-radius:5px; }
-        .quiz-chat__message--assistant .quiz-chat__bubble { border-bottom-left-radius:5px; white-space:normal; }
+        .quiz-chat__message--assistant .quiz-chat__bubble { border-bottom-left-radius:5px; }
         .quiz-chat__sender { display:block; margin:0 0 5px; color:var(--qc-muted); font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
         .quiz-chat__message--user .quiz-chat__sender { color:rgba(255,255,255,.7); }
+        .quiz-chat__plain-text { display:block; overflow-wrap:anywhere; white-space:pre-wrap; }
+        .quiz-chat__conversation-action { display:flex; max-width:720px; margin:-8px auto 20px; }
+        .quiz-chat__conversation-action .quiz-chat__create:focus-visible { outline:3px solid rgb(var(--quiz-chat-primary-rgb,217 119 6) / .28); outline-offset:3px; }
         .quiz-chat__markdown { overflow-wrap:anywhere; }
         .quiz-chat__markdown > :first-child { margin-top:0; }
         .quiz-chat__markdown > :last-child { margin-bottom:0; }
@@ -107,9 +110,6 @@
             @if ($sessionId !== null)
                 <div class="quiz-chat__header-actions">
                     <button class="quiz-chat__review" type="button" wire:click="startNewInterview" @disabled($generationStatus === 'generating')>New interview</button>
-                    @if ((! $isEditing && in_array($generationStatus, ['interviewing', 'ready'], true)) || ($isEditing && $generationStatus === 'ready'))
-                        <button class="quiz-chat__create" type="button" wire:click="executeNow" wire:loading.attr="disabled">{{ $isEditing ? 'Update quiz' : 'Create quiz now' }}</button>
-                    @endif
                     <button class="quiz-chat__review" type="button" wire:click="$toggle('showBrief')" @disabled($generationStatus === 'generating')>{{ $showBrief ? 'Back to chat' : 'Review brief' }}</button>
                 </div>
             @endif
@@ -135,21 +135,26 @@
             @elseif ($sessionId === null)
                 <div class="quiz-chat__welcome"><h2>{{ $isEditing ? 'How should this quiz improve?' : 'What quiz do you want to create?' }}</h2><p>{{ $isEditing ? 'The assistant will receive a snapshot of the existing draft. Describe what should change, then review its recommendation before updating.' : 'Tell me the rough idea. I will ask only what is needed, and you can say create the quiz now whenever you want a draft.' }}</p></div>
             @else
-                @foreach ($this->session()?->messages ?? [] as $message)
+                @foreach ($this->conversationMessages() as $message)
                     <article class="quiz-chat__message quiz-chat__message--{{ $message->role === 'assistant' ? 'assistant' : 'user' }}">
                         <div class="quiz-chat__bubble">
                             @if ($message->role === 'assistant')
                                 <span class="quiz-chat__sender">Quiz assistant</span>
                                 <div class="quiz-chat__markdown">{!! \Illuminate\Support\Str::markdown($message->content, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}</div>
                             @else
-                                {{ $message->content }}
+                                <span class="quiz-chat__plain-text">{{ $message->content }}</span>
                             @endif
                         </div>
                     </article>
                 @endforeach
+                @if ((! $isEditing && in_array($generationStatus, ['interviewing', 'ready'], true)) || ($isEditing && $generationStatus === 'ready'))
+                    <div class="quiz-chat__conversation-action">
+                        <button class="quiz-chat__create" type="button" wire:click="executeNow" wire:loading.attr="disabled">{{ $isEditing ? 'Update quiz' : 'Create quiz now' }}</button>
+                    </div>
+                @endif
             @endif
             <template x-if="pending">
-                <article class="quiz-chat__message quiz-chat__message--user quiz-chat__message--pending"><div class="quiz-chat__bubble"><span x-text="pending"></span></div></article>
+                <article class="quiz-chat__message quiz-chat__message--user quiz-chat__message--pending"><div class="quiz-chat__bubble"><span class="quiz-chat__plain-text" x-text="pending"></span></div></article>
             </template>
             <template x-if="sending">
                 <article class="quiz-chat__message quiz-chat__message--assistant quiz-chat__typing" aria-label="Quiz assistant is typing"><div class="quiz-chat__bubble"><span class="quiz-chat__typing-dots"><i></i><i></i><i></i></span></div></article>
@@ -163,7 +168,7 @@
             </aside>
         @elseif ($generationStatus === 'generated' && $generatedQuizUrl)
             <aside class="quiz-chat__generation quiz-chat__generation--complete" aria-live="polite">
-                <div class="quiz-chat__generation-copy"><div><strong>{{ $isEditing ? 'Quiz draft updated' : 'Your quiz draft is ready' }}</strong><span>Review the questions and presentation before publishing.</span></div></div>
+                <div class="quiz-chat__generation-copy"><div><strong>{{ $isEditing ? 'Quiz draft updated' : 'Your quiz draft is ready' }}</strong><span>{{ $isEditing ? 'Review the updated draft, or keep chatting below to refine it again.' : 'Review the questions and presentation before publishing.' }}</span></div></div>
                 <a class="quiz-chat__generation-link" href="{{ $generatedQuizUrl }}" wire:navigate>{{ $isEditing ? 'Review updated quiz' : 'Review and edit quiz' }}</a>
             </aside>
         @elseif ($generationStatus === 'failed')
@@ -178,7 +183,7 @@
             </aside>
         @endif
 
-        @if (! $showBrief && in_array($generationStatus, ['idle', 'interviewing', 'ready'], true))
+        @if (! $showBrief && (in_array($generationStatus, ['idle', 'interviewing', 'ready'], true) || ($isEditing && $generationStatus === 'generated')))
             <div
                 wire:key="quiz-chat-composer-{{ $sessionId ?? 'new' }}"
                 class="quiz-chat__composer"
@@ -192,8 +197,8 @@
                     x-on:keydown.enter="if (! $event.shiftKey && ! $event.isComposing) { $event.preventDefault(); send() }"
                     rows="2"
                     title="Enter sends. Shift + Enter adds a new line."
-                    aria-label="{{ $sessionId === null ? ($isEditing ? 'Describe how the quiz should change' : 'Describe the quiz you want to create') : 'Write your answer' }}"
-                    placeholder="{{ $sessionId === null ? ($isEditing ? 'Describe what you want to improve…' : 'Describe the quiz you want to create…') : ($isEditing ? 'Write a reply, or say update the quiz now…' : 'Write a reply, or say create the quiz now…') }}"
+                    aria-label="{{ $isEditing && $generationStatus === 'generated' ? 'Describe another refinement' : ($sessionId === null ? ($isEditing ? 'Describe how the quiz should change' : 'Describe the quiz you want to create') : 'Write your answer') }}"
+                    placeholder="{{ $isEditing && $generationStatus === 'generated' ? 'Keep refining—describe what should change next…' : ($sessionId === null ? ($isEditing ? 'Describe what you want to improve…' : 'Describe the quiz you want to create…') : ($isEditing ? 'Write a reply, or say update the quiz now…' : 'Write a reply, or say create the quiz now…')) }}"
                 ></textarea>
                 <button class="quiz-chat__send" type="button" x-on:click="send()" x-bind:disabled="! draft.trim() || sending" aria-label="{{ $sessionId === null ? 'Start chat' : 'Send message' }}" title="{{ $sessionId === null ? 'Start chat' : 'Send message' }}">
                     <svg x-show="! sending" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 2.7 3 10.1c-.9.4-.9 1.7.1 2l7.1 2.3 2.3 7.1c.3 1 1.6 1 2 .1l7.4-18.5c.3-.7-.4-1.4-1.1-1.1ZM11.2 13.1l-1.4 5-1.2-3.7-3.7-1.2 12.9-5.1-6.7 5Z" /></svg>

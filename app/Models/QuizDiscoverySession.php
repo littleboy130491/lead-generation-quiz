@@ -7,6 +7,7 @@ use App\Enums\QuizDiscoveryStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use LogicException;
 
 class QuizDiscoverySession extends Model
@@ -31,7 +32,20 @@ class QuizDiscoverySession extends Model
             if ($session->isDirty('source_quiz_snapshot')) {
                 throw new LogicException('The source quiz snapshot for an AI edit interview is immutable.');
             }
+            if ($session->isDirty('continued_from_session_id')) {
+                throw new LogicException('The parent AI edit session is immutable.');
+            }
         });
+    }
+
+    public function continuedFrom(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'continued_from_session_id');
+    }
+
+    public function continuation(): HasOne
+    {
+        return $this->hasOne(self::class, 'continued_from_session_id');
     }
 
     public function user(): BelongsTo

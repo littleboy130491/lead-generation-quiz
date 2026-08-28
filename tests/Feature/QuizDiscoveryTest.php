@@ -86,6 +86,27 @@ class QuizDiscoveryTest extends TestCase
         $this->assertStringNotContainsString('javascript:', $html);
     }
 
+    public function test_user_message_text_is_isolated_from_template_whitespace(): void
+    {
+        $user = User::factory()->create();
+        $session = QuizDiscoverySession::query()->create([
+            'user_id' => $user->id,
+            'status' => QuizDiscoveryStatus::Interviewing,
+            'brief' => [],
+            'system_prompt_snapshot' => 'Safe discovery prompt.',
+        ]);
+        $session->messages()->create([
+            'role' => 'user',
+            'content' => "sure\nsecond line",
+        ]);
+
+        $html = Livewire::actingAs($user)
+            ->test(QuizDiscoveryChat::class)
+            ->html();
+
+        $this->assertStringContainsString('<span class="quiz-chat__plain-text">sure'."\n".'second line</span>', $html);
+    }
+
     public function test_the_composer_sends_on_enter_and_keeps_shift_enter_for_new_lines(): void
     {
         $composer = Livewire::actingAs(User::factory()->create())
@@ -236,6 +257,16 @@ class QuizDiscoveryTest extends TestCase
         $this->assertSame(0, Quiz::query()->count());
         Bus::assertNotDispatched(GenerateQuizDraftJob::class);
         $component->assertSee('Create quiz now')->assertSee('keep chatting');
+        $html = $component->html();
+        $headerEnd = strpos($html, '</header>');
+        $assistantMessage = strrpos($html, '<article class="quiz-chat__message quiz-chat__message--assistant">');
+        $conversationAction = strpos($html, '<div class="quiz-chat__conversation-action">');
+        $this->assertIsInt($headerEnd);
+        $this->assertIsInt($assistantMessage);
+        $this->assertIsInt($conversationAction);
+        $this->assertGreaterThan($headerEnd, $conversationAction);
+        $this->assertGreaterThan($assistantMessage, $conversationAction);
+        $this->assertStringNotContainsString('wire:click="executeNow"', substr($html, 0, $headerEnd));
 
         $component->call('sendReply', 'Use a confident and educational tone.');
 
@@ -668,5 +699,149 @@ class QuizDiscoveryTest extends TestCase
         $this->assertSame($publishedDefinition, $revision->fresh()->definition);
         $this->assertSame(QuizDiscoveryStatus::Generated, $session->fresh()->status);
         $component->call('pollGeneration')->assertSee('Quiz draft updated');
+    }
+
+    public function test_a_completed_edit_can_continue_with_the_newly_updated_draft_as_fresh_context(): void
+    {
+        $seen = new class
+        {
+            public array $messages = [];
+        };
+        $this->swap(QuizDiscoveryInterviewer::class, new class($seen) implements QuizDiscoveryInterviewer
+        {
+            public function __construct(private object $seen) {}
+
+            public function respond(array $brief, array $messages, string $systemPrompt): array
+            {
+                $this->seen->messages = $messages;
+
+                return [
+                    'message' => 'I recommend shortening the updated flow to three focused questions. You can update the quiz when ready.',
+                    'brief' => ['objective' => 'Make the updated flow more concise'],
+                    'action' => 'generate',
+                ];
+            }
+        });
+        $user = User::factory()->create();
+        $quiz = Quiz::factory()->create([
+            'draft_definition' => [
+                'schema_version' => 1,
+                'blocks' => [[
+                    'id' => 'newly-updated-question',
+                    'type' => 'question',
+                    'question_type' => 'yes_no',
+                    'label' => 'Is the updated process documented?',
+                ]],
+            ],
+        ]);
+        $completed = QuizDiscoverySession::query()->create([
+            'user_id' => $user->id,
+            'quiz_id' => $quiz->id,
+            'mode' => QuizDiscoveryMode::Edit,
+            'status' => QuizDiscoveryStatus::Generated,
+            'brief' => ['business_context' => 'Operations assessment'],
+            'source_quiz_snapshot' => [
+                'name' => $quiz->name,
+                'description' => $quiz->description,
+                'draft_definition' => ['schema_version' => 1, 'blocks' => [['id' => 'pre-update-question']]],
+            ],
+            'system_prompt_snapshot' => 'Safe edit prompt.',
+            'generation_finished_at' => now(),
+        ]);
+        $completed->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Your quiz draft was updated. Review the complete replacement before publishing.',
+            'brief_snapshot' => $completed->brief,
+        ]);
+
+        $component = Livewire::actingAs($user)
+            ->test(QuizDiscoveryChat::class, ['quizId' => $quiz->id, 'mode' => 'edit'])
+            ->assertSee('Keep refining')
+            ->assertSee('Your quiz draft was updated')
+            ->call('sendReply', 'Keep the update, but make the flow shorter.');
+
+        $refinement = QuizDiscoverySession::query()->whereKeyNot($completed->id)->sole();
+        $context = json_encode($seen->messages, JSON_THROW_ON_ERROR);
+
+        $this->assertSame($completed->id, $refinement->continued_from_session_id);
+        $this->assertSame(QuizDiscoveryStatus::Generated, $completed->fresh()->status);
+        $this->assertSame(QuizDiscoveryStatus::Ready, $refinement->status);
+        $this->assertSame('Operations assessment', $refinement->brief['business_context']);
+        $this->assertSame('newly-updated-question', $refinement->source_quiz_snapshot['draft_definition']['blocks'][0]['id']);
+        $this->assertStringContainsString('newly-updated-question', $context);
+        $this->assertStringContainsString('Your quiz draft was updated', $context);
+        $this->assertStringContainsString('Keep the update, but make the flow shorter.', $context);
+        $component
+            ->assertSee('Your quiz draft was updated')
+            ->assertSee('Keep the update, but make the flow shorter.')
+            ->assertSee('Update quiz');
+
+        $quiz->update([
+            'draft_definition' => [
+                'schema_version' => 1,
+                'blocks' => [[
+                    'id' => 'twice-updated-question',
+                    'type' => 'question',
+                    'question_type' => 'yes_no',
+                    'label' => 'Is the twice-refined process documented?',
+                ]],
+            ],
+        ]);
+        $refinement->update([
+            'status' => QuizDiscoveryStatus::Generated,
+            'generation_finished_at' => now(),
+        ]);
+        $refinement->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Your quiz draft was updated again.',
+            'brief_snapshot' => $refinement->brief,
+        ]);
+
+        $component
+            ->call('pollGeneration')
+            ->assertSee('Keep refining')
+            ->call('sendReply', 'One more pass: make the wording friendlier.');
+
+        $secondRefinement = QuizDiscoverySession::query()
+            ->where('continued_from_session_id', $refinement->id)
+            ->sole();
+        $this->assertSame('twice-updated-question', $secondRefinement->source_quiz_snapshot['draft_definition']['blocks'][0]['id']);
+        $this->assertSame(QuizDiscoveryStatus::Generated, $refinement->fresh()->status);
+        $component
+            ->assertSee('Your quiz draft was updated again.')
+            ->assertSee('One more pass: make the wording friendlier.')
+            ->assertSee('Update quiz');
+    }
+
+    public function test_another_administrator_cannot_continue_an_owners_completed_edit(): void
+    {
+        $owner = User::factory()->create();
+        $quiz = Quiz::factory()->create();
+        $completed = QuizDiscoverySession::query()->create([
+            'user_id' => $owner->id,
+            'quiz_id' => $quiz->id,
+            'mode' => QuizDiscoveryMode::Edit,
+            'status' => QuizDiscoveryStatus::Generated,
+            'brief' => ['business_context' => 'Private assessment'],
+            'source_quiz_snapshot' => [
+                'name' => $quiz->name,
+                'description' => $quiz->description,
+                'draft_definition' => $quiz->draft_definition,
+            ],
+            'system_prompt_snapshot' => 'Safe edit prompt.',
+            'generation_finished_at' => now(),
+        ]);
+        $completed->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Private completion message.',
+        ]);
+
+        Livewire::actingAs(User::factory()->create())
+            ->test(QuizDiscoveryChat::class, ['quizId' => $quiz->id, 'mode' => 'edit'])
+            ->assertDontSee('Private completion message.')
+            ->call('sendReply', 'Change the private quiz.');
+
+        $this->assertSame(1, QuizDiscoverySession::query()->count());
+        $this->assertSame(1, $completed->messages()->count());
     }
 }

@@ -31,24 +31,69 @@ class RunQuizDiscovery
     public function __construct(
         private QuizDiscoveryInterviewer $interviewer,
         private ApplicationSettings $settings,
+        private ReadQuizDiscoveryConversation $conversation,
     ) {}
 
     public function start(int $userId, string $opening, ?Quiz $sourceQuiz = null): QuizDiscoverySession
     {
+        $session = $this->createSession($userId, $sourceQuiz);
+
+        return $this->reply($session, $opening);
+    }
+
+    public function continueEdit(QuizDiscoverySession $completedSession, string $message): QuizDiscoverySession
+    {
+        $message = trim(strip_tags($message));
+        $completedSession = $completedSession->fresh() ?? $completedSession;
+        if ($message === '' || $completedSession->mode !== QuizDiscoveryMode::Edit || $completedSession->status !== QuizDiscoveryStatus::Generated || $completedSession->quiz_id === null) {
+            return $completedSession;
+        }
+
+        $continued = Cache::lock('quiz-discovery-continuation:'.$completedSession->id, 300)
+            ->get(function () use ($completedSession, $message): QuizDiscoverySession {
+                $existing = QuizDiscoverySession::query()
+                    ->where('continued_from_session_id', $completedSession->id)
+                    ->where('user_id', $completedSession->user_id)
+                    ->where('quiz_id', $completedSession->quiz_id)
+                    ->where('mode', QuizDiscoveryMode::Edit)
+                    ->first();
+                if ($existing !== null) {
+                    return $this->reply($existing, $message);
+                }
+
+                $quiz = Quiz::query()->findOrFail($completedSession->quiz_id);
+                $session = $this->createSession(
+                    $completedSession->user_id,
+                    $quiz,
+                    $completedSession->brief ?? [],
+                    $completedSession->id,
+                );
+
+                return $this->reply($session, $message);
+            });
+
+        return $continued instanceof QuizDiscoverySession
+            ? $continued
+            : ($completedSession->fresh(['messages']) ?? $completedSession);
+    }
+
+    /** @param array<string, mixed> $brief */
+    private function createSession(int $userId, ?Quiz $sourceQuiz, array $brief = [], ?int $continuedFromSessionId = null): QuizDiscoverySession
+    {
         $prompts = $this->settings->get('prompts');
         $template = (string) ($prompts['discovery_template'] ?? QuizDiscoveryPrompt::DEFAULT_TEMPLATE);
         $mode = $sourceQuiz === null ? QuizDiscoveryMode::Create : QuizDiscoveryMode::Edit;
-        $session = QuizDiscoverySession::create([
+
+        return QuizDiscoverySession::create([
             'user_id' => $userId,
+            'continued_from_session_id' => $continuedFromSessionId,
             'quiz_id' => $sourceQuiz?->id,
             'mode' => $mode,
             'status' => QuizDiscoveryStatus::Interviewing,
-            'brief' => [],
+            'brief' => $brief,
             'source_quiz_snapshot' => $sourceQuiz === null ? null : $this->sourceQuizSnapshot($sourceQuiz),
             'system_prompt_snapshot' => trim($template)."\n\n".QuizDiscoveryPrompt::TURN_CONTRACT.($mode === QuizDiscoveryMode::Edit ? "\n\n".QuizDiscoveryPrompt::EDIT_TURN_CONTRACT : ''),
         ]);
-
-        return $this->reply($session, $opening);
     }
 
     public function reply(QuizDiscoverySession $session, string $message): QuizDiscoverySession
@@ -90,14 +135,7 @@ class RunQuizDiscovery
             return $session->fresh(['messages']) ?? $session;
         }
 
-        $history = $session->messages()
-            ->orderByDesc('id')
-            ->limit(self::HISTORY_TURNS)
-            ->get(['id', 'role', 'content'])
-            ->sortBy('id')
-            ->map(fn ($item) => $item->only(['role', 'content']))
-            ->values()
-            ->all();
+        $history = $this->conversation->recentHistory($session, self::HISTORY_TURNS);
         if ($session->mode === QuizDiscoveryMode::Edit && $session->source_quiz_snapshot !== null) {
             array_unshift($history, [
                 'role' => 'user',
