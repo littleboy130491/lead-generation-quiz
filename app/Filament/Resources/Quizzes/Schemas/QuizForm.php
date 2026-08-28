@@ -8,6 +8,7 @@ use App\Models\Quiz;
 use Filament\Forms\Components\Builder;
 use Filament\Forms\Components\Builder\Block;
 use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -58,7 +59,7 @@ class QuizForm
                         ])->columns(1),
                 ]),
                 Tab::make('Quiz')->schema([
-                    Section::make('Quiz builder')->description('Drag blocks into their public order. IDs must remain stable after publishing. Conditions reference earlier question IDs only.')
+                    Section::make('Quiz builder')->description('Drag blocks into their public order. Question and content IDs must remain stable after publishing. Page-break IDs are managed automatically. Conditions reference earlier question IDs only.')
                         ->schema([
                             Builder::make('builder_blocks')->blocks([
                                 Block::make('question')->label('Question')->schema([
@@ -109,7 +110,7 @@ class QuizForm
                                     ...self::visibilityFields(),
                                 ])->columns(1),
                                 Block::make('page_break')->label('Page break')->schema([
-                                    TextInput::make('id')->required()->alphaDash()->maxLength(100)->helperText('Separates this page from the next one.'),
+                                    Hidden::make('id'),
                                 ]),
                             ])->default([])->collapsible()->cloneable()->reorderable()->columnSpanFull(),
                         ]),
@@ -211,6 +212,28 @@ class QuizForm
         return filled($password) ? Hash::make($password) : null;
     }
 
+    /** @param array<string, mixed> $data @return array<string, mixed> */
+    public static function toPersistenceData(array $data): array
+    {
+        $data['draft_definition'] = self::toDefinition($data);
+
+        unset(
+            $data['blocks'],
+            $data['builder_blocks'],
+            $data['opening'],
+            $data['result'],
+            $data['score_results'],
+            $data['thank_you'],
+        );
+
+        if (filled($data['password'] ?? null)) {
+            $data['password_hash'] = self::passwordForStorage($data['password']);
+        }
+        unset($data['password']);
+
+        return $data;
+    }
+
     /** @param array<string, mixed> $state @return array<string, mixed> */
     public static function toDefinition(array $state): array
     {
@@ -224,34 +247,7 @@ class QuizForm
         $definition = [
             'schema_version' => 1,
             'result' => ['mode' => $mode],
-            'blocks' => array_values(array_map(static function (array $block): array {
-                $data = $block['data'] ?? $block;
-                $type = $block['type'] ?? $data['type'] ?? null;
-                $data['type'] = $type;
-                if (array_key_exists('visibility', $data)) {
-                    $data['visibility'] = self::conditionForStorage($data['visibility']);
-                }
-                if (($type === 'question') && is_array($data['options'] ?? null)) {
-                    $data['options'] = array_values(array_map(static fn (array $option): array => self::optionForStorage($option), $data['options']));
-                }
-                foreach (['yes_score', 'no_score'] as $scoreKey) {
-                    if (array_key_exists($scoreKey, $data)) {
-                        if ($data[$scoreKey] === null || $data[$scoreKey] === '') {
-                            unset($data[$scoreKey]);
-                        } else {
-                            $data[$scoreKey] = (int) $data[$scoreKey];
-                        }
-                    }
-                }
-                if (($type === 'question') && array_key_exists('exclude_from_ai', $data)) {
-                    $data['exclude_from_ai'] = (bool) $data['exclude_from_ai'];
-                    if ($data['exclude_from_ai'] !== true) {
-                        unset($data['exclude_from_ai']);
-                    }
-                }
-
-                return array_filter($data, static fn (mixed $value): bool => $value !== null && $value !== '');
-            }, $blocks)),
+            'blocks' => self::blocksForStorage($blocks),
         ];
 
         if ($mode === QuizResultMode::Ai->value) {
@@ -279,6 +275,85 @@ class QuizForm
         }
 
         return $definition;
+    }
+
+    /** @param array<int|string, mixed> $blocks @return list<array<string, mixed>> */
+    private static function blocksForStorage(array $blocks): array
+    {
+        $reservedIds = [];
+        $nonPageBreakIds = [];
+        foreach ($blocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+
+            $data = $block['data'] ?? $block;
+            $type = $block['type'] ?? $data['type'] ?? null;
+            $id = trim((string) ($data['id'] ?? ''));
+            if ($id !== '') {
+                $reservedIds[$id] = true;
+            }
+            if ($type !== 'page_break' && $id !== '') {
+                $nonPageBreakIds[$id] = true;
+            }
+        }
+
+        $storedBlocks = [];
+        $assignedPageBreakIds = [];
+        $pageBreakSequence = 1;
+        foreach ($blocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+
+            $data = $block['data'] ?? $block;
+            $type = $block['type'] ?? $data['type'] ?? null;
+            $data['type'] = $type;
+
+            if ($type === 'page_break') {
+                $id = trim((string) ($data['id'] ?? ''));
+                $validExistingId = $id !== ''
+                    && strlen($id) <= 100
+                    && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]*$/', $id) === 1
+                    && ! isset($nonPageBreakIds[$id])
+                    && ! isset($assignedPageBreakIds[$id]);
+
+                if (! $validExistingId) {
+                    do {
+                        $id = 'page_break_'.$pageBreakSequence++;
+                    } while (isset($reservedIds[$id]) || isset($assignedPageBreakIds[$id]));
+                }
+                $data['id'] = $id;
+                $reservedIds[$id] = true;
+                $assignedPageBreakIds[$id] = true;
+            }
+
+            if (array_key_exists('visibility', $data)) {
+                $data['visibility'] = self::conditionForStorage($data['visibility']);
+            }
+            if (($type === 'question') && is_array($data['options'] ?? null)) {
+                $data['options'] = array_values(array_map(static fn (array $option): array => self::optionForStorage($option), $data['options']));
+            }
+            foreach (['yes_score', 'no_score'] as $scoreKey) {
+                if (array_key_exists($scoreKey, $data)) {
+                    if ($data[$scoreKey] === null || $data[$scoreKey] === '') {
+                        unset($data[$scoreKey]);
+                    } else {
+                        $data[$scoreKey] = (int) $data[$scoreKey];
+                    }
+                }
+            }
+            if (($type === 'question') && array_key_exists('exclude_from_ai', $data)) {
+                $data['exclude_from_ai'] = (bool) $data['exclude_from_ai'];
+                if ($data['exclude_from_ai'] !== true) {
+                    unset($data['exclude_from_ai']);
+                }
+            }
+
+            $storedBlocks[] = array_filter($data, static fn (mixed $value): bool => $value !== null && $value !== '');
+        }
+
+        return array_values($storedBlocks);
     }
 
     /** @param array<string, mixed> $option @return array<string, mixed> */

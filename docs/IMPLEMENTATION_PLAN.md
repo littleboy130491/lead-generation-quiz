@@ -253,13 +253,13 @@ Password behavior:
 
 ### 3.2 Block builder
 
-Use Filament builder/repeater components with stable IDs and drag ordering. Create and edit quiz pages are a single full-width column (`Width::Full`, form `columns(1)`). Builder items are collapsible. The MVP form must expose name, unique non-reserved slug validation, draft default status, hash-only password input, non-secret lead-capture settings, and an optional opening page (HTML, start-button label, hide-start-button). On edit, hydrate the stored definition into Builder state and omit `password_hash`; a blank password means unchanged.
+Use Filament builder/repeater components with stable IDs and drag ordering. Create and edit quiz pages are a single full-width column (`Width::Full`, form `columns(1)`). Builder items are collapsible. The MVP form must expose name, unique non-reserved slug validation, draft default status, hash-only password input, non-secret lead-capture settings, and an optional opening page (HTML, start-button label, hide-start-button). On edit, hydrate the stored definition into Builder state and omit `password_hash`; a blank password means unchanged. Treat nested definition editors as virtual form roots: one shared persistence transform must remove them from both create and edit model payloads after composing `draft_definition`.
 
 Block editors:
 
 - Question with type-specific fields, requiredness, help text, optional image URL and/or plain-text icon, repeatable options (optional integer score), optional yes/no scores, and structured visibility fields.
 - Content with Markdown, optional continue label, and structured visibility fields.
-- Visual page-break separator.
+- Visual page-break separator with no administrator-facing ID field; retain a valid existing internal ID or generate a collision-free `page_break_N` identity during persistence.
 - Optional score-result bands (`id`, title, min/max score, optional HTML) for predetermined outcomes from the total score.
 
 Transform Builder items to `{schema_version: 1, result?: {mode}, opening?: {...}, score_results?: [...], thank_you?: {...}, blocks: [...]}` before persistence and reverse that transform for editing. The Filament quiz form uses Settings / Quiz / Result / Thank you tabs. Do not save array positions as identity or add arbitrary raw script fields. Opening HTML is sanitized at public render with the thank-you allowlist; gated openings dismiss via submission metadata before page 0. Score-mode questionnaire completion computes scoring snapshots; AI mode queues automatic analysis and always shows thank-you (global or override).
@@ -272,7 +272,7 @@ Provide structured rule groups and restrict selectable dependencies to valid ear
 
 Create:
 
-- Draft preview route accessible only to authorized admins with signed/authorized access.
+- Dedicated interactive draft preview route accessible only to authorized admins, including for quizzes with an active published revision. Edit/list Preview actions target this route; it uses isolated session state and never creates submissions. The ordinary public slug remains pinned to the active immutable revision until republish.
 - `PublishQuizRevision` action inside a database transaction.
 - Revision viewer and comparison metadata.
 
@@ -318,10 +318,11 @@ Attribution data is bounded and privacy-minimized: retain structured sanitized q
 Create page rendering and navigation with:
 
 - Progress indicator based on effective visible pages.
-- Back/next controls.
+- Prompt-first immersive questionnaire stage with a quiet quiz-title context, conversational question/input hierarchy, and lightweight Back/Next controls.
+- Progressive application-owned enhancement for visible A–J option shortcuts, keyboard selection, Enter-to-continue, and supported cross-document transitions; native form submission remains the no-JavaScript baseline and reduced-motion disables animation.
 - Per-page validation.
 - Multiple questions on a page.
-- Content-only pages.
+- Content-only pages rendered as compact responsive progress interludes with a neutral checkpoint label, waypoint motif, stronger Markdown hierarchy, and anchored navigation; do not apply this treatment to question pages.
 - Mobile and keyboard accessibility.
 
 The current-page server-side save action is the sole public questionnaire mutation path. Before any write, it derives the exact allowed ID set from the frozen server-evaluated visible current page and rejects every unknown, hidden, off-page, or stale answer key; content-only pages accept only an empty answer map. It then validates question types, requiredness, option values, and text bounds against the frozen revision; it never trusts client-supplied labels or visibility. Rejection must leave answers, page/status, activity/touch context, events, completion, and analysis state unchanged. Do not add a direct questionnaire-completion endpoint. Feature coverage must submit valid visible answers plus an unknown ID and prove rejection with no mutation.

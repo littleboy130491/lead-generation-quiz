@@ -28,15 +28,7 @@ class EditQuiz extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        $data['draft_definition'] = QuizForm::toDefinition($data);
-        unset($data['builder_blocks']);
-
-        if (filled($data['password'] ?? null)) {
-            $data['password_hash'] = QuizForm::passwordForStorage($data['password']);
-        }
-        unset($data['password']);
-
-        return $data;
+        return QuizForm::toPersistenceData($data);
     }
 
     protected function quizDiscoveryQuizId(): ?int
@@ -49,7 +41,7 @@ class EditQuiz extends EditRecord
         return [
             Action::make('preview')
                 ->label('Preview')
-                ->url(fn (): string => route('quizzes.show', $this->getRecord()), shouldOpenInNewTab: true),
+                ->url(fn (): string => route('quizzes.draft-preview.show', $this->getRecord()), shouldOpenInNewTab: true),
             $this->quizAiEditAction(),
             Action::make('publish')->requiresConfirmation()->action(fn () => app(PublishQuizRevision::class)->handle($this->getRecord(), auth()->id())),
             DeleteAction::make(),

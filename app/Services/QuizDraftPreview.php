@@ -10,13 +10,9 @@ class QuizDraftPreview
 {
     public function canAccess(Request $request, Quiz $quiz): bool
     {
-        if ($quiz->status->value !== 'draft') {
-            return false;
-        }
-
         $user = $request->user();
 
-        return $user !== null && method_exists($user, 'canAccessPanel');
+        return $quiz->exists && $user !== null && method_exists($user, 'canAccessPanel');
     }
 
     public function state(Request $request, Quiz $quiz): DraftPreviewState

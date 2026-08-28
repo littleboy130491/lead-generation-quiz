@@ -27,6 +27,13 @@ class PublicQuizFlowTest extends TestCase
             ->assertSee('rel="stylesheet"', false)
             ->assertSee('quiz-atmosphere', false)
             ->assertSee('quiz-brand', false)
+            ->assertSee('quiz-header-runner', false)
+            ->assertSee('quiz-stage', false)
+            ->assertSee('data-quiz-form', false)
+            ->assertSee('data-shortcut="A"', false)
+            ->assertSee('data-shortcut="C"', false)
+            ->assertSee('quiz-enter-hint', false)
+            ->assertSee('/js/quiz.js', false)
             ->assertSee('--quiz-primary', false)
             ->assertSee('First question')
             ->assertSee('quiz-required', false)
@@ -105,14 +112,21 @@ class PublicQuizFlowTest extends TestCase
             $definition['blocks'][4],
         ];
         $quiz = $this->publishedQuiz($definition);
-        $this->get('/'.$quiz->slug);
+        $this->get('/'.$quiz->slug)
+            ->assertDontSee('quiz-card-content-only', false)
+            ->assertDontSee('A quick pause');
         $submission = Submission::firstOrFail();
 
         $this->get(route('quizzes.contact', [$quiz, $submission]))->assertForbidden();
         $this->post(route('submissions.save-page', [$submission, 0]), [
             'answers' => ['q1' => 'no', 'q2' => ['one']], 'direction' => 'next',
         ])->assertRedirect(route('quizzes.show', $quiz));
-        $this->get('/'.$quiz->slug)->assertSee('Take a breath')->assertSee('Continue');
+        $this->get('/'.$quiz->slug)
+            ->assertSee('Take a breath')
+            ->assertSee('A quick pause')
+            ->assertSee('quiz-card-content-only', false)
+            ->assertSee('quiz-interlude-marker', false)
+            ->assertSee('Continue');
         $this->post(route('submissions.save-page', [$submission, 1]), ['answers' => [], 'direction' => 'next'])
             ->assertRedirect(route('quizzes.contact', [$quiz, $submission]));
     }

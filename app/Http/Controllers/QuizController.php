@@ -30,11 +30,18 @@ class QuizController extends Controller
             return $this->showPublished($request, $quiz, $start, $settings, $branding, $html);
         }
 
-        if ($draftPreview->canAccess($request, $quiz)) {
-            return $this->showDraftPreview($request, $quiz, $branding, $html, $draftPreview);
+        if ($quiz->status === QuizStatus::Draft && $draftPreview->canAccess($request, $quiz)) {
+            return $this->renderDraftPreview($request, $quiz, $branding, $html, $draftPreview);
         }
 
         abort(404);
+    }
+
+    public function draftPreview(Request $request, Quiz $quiz, BrandingSettings $branding, CompletionHtmlSanitizer $html, QuizDraftPreview $draftPreview)
+    {
+        abort_unless($draftPreview->canAccess($request, $quiz), 404);
+
+        return $this->renderDraftPreview($request, $quiz, $branding, $html, $draftPreview);
     }
 
     public function unlock(Request $request, Quiz $quiz): RedirectResponse
@@ -89,7 +96,7 @@ class QuizController extends Controller
         $state->current_page = 0;
         $draftPreview->put($request, $quiz, $state);
 
-        return redirect()->route('quizzes.show', $quiz);
+        return redirect()->route('quizzes.draft-preview.show', $quiz);
     }
 
     public function savePage(Request $request, Submission $submission, int $page, SaveQuizPage $save): RedirectResponse
@@ -114,7 +121,7 @@ class QuizController extends Controller
             return redirect()->route('quizzes.draft-preview.complete', $quiz);
         }
 
-        return redirect()->route('quizzes.show', $quiz);
+        return redirect()->route('quizzes.draft-preview.show', $quiz);
     }
 
     public function draftComplete(Request $request, Quiz $quiz, BrandingSettings $branding, QuizDraftPreview $draftPreview)
@@ -185,7 +192,7 @@ class QuizController extends Controller
         return $response;
     }
 
-    private function showDraftPreview(Request $request, Quiz $quiz, BrandingSettings $branding, CompletionHtmlSanitizer $html, QuizDraftPreview $draftPreview)
+    private function renderDraftPreview(Request $request, Quiz $quiz, BrandingSettings $branding, CompletionHtmlSanitizer $html, QuizDraftPreview $draftPreview)
     {
         $definition = $draftPreview->definition($quiz);
         $state = $draftPreview->state($request, $quiz);

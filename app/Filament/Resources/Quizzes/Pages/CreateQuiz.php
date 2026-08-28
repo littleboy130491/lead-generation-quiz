@@ -18,15 +18,7 @@ class CreateQuiz extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $data['draft_definition'] = QuizForm::toDefinition($data);
-        unset($data['builder_blocks']);
-
-        if (filled($data['password'] ?? null)) {
-            $data['password_hash'] = QuizForm::passwordForStorage($data['password']);
-        }
-        unset($data['password']);
-
-        return $data;
+        return QuizForm::toPersistenceData($data);
     }
 
     protected function getHeaderActions(): array

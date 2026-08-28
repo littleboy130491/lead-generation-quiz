@@ -7,6 +7,7 @@ use App\Actions\Quizzes\PublishQuizRevision;
 use App\Ai\Contracts\QuizAnalysisGenerator;
 use App\Ai\Data\ReportSchema;
 use App\Domain\Quiz\Pagination\QuizPageCompiler;
+use App\Domain\Quiz\Validation\QuizDefinitionValidator;
 use App\Enums\AnalysisStatus;
 use App\Enums\AnalysisTrigger;
 use App\Enums\DeliveryStatus;
@@ -143,7 +144,7 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->actingAs($user)->get(route('admin.quizzes.history', $quiz))->assertOk()->assertSee('Version 1');
     }
 
-    public function test_edit_quiz_header_includes_preview_action_to_live_url(): void
+    public function test_edit_quiz_header_includes_preview_action_to_interactive_draft_url(): void
     {
         $quiz = Quiz::factory()->create(['slug' => 'previewable-draft']);
 
@@ -152,7 +153,60 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
 
         $action = collect($page->instance()->getCachedHeaderActions())->first(fn ($action) => $action->getName() === 'preview');
         $this->assertNotNull($action);
-        $this->assertSame(route('quizzes.show', $quiz), $action->getUrl());
+        $this->assertSame(route('quizzes.draft-preview.show', $quiz), $action->getUrl());
+    }
+
+    public function test_published_quiz_keeps_serving_its_revision_while_admin_draft_preview_honors_new_page_breaks(): void
+    {
+        $user = User::factory()->create();
+        $quiz = Quiz::factory()->create([
+            'slug' => 'published-with-new-draft-pages',
+            'draft_definition' => [
+                'schema_version' => 1,
+                'blocks' => [
+                    ['id' => 'q1', 'type' => 'question', 'question_type' => 'yes_no', 'label' => 'Published first question', 'required' => true],
+                    ['id' => 'q2', 'type' => 'question', 'question_type' => 'short_text', 'label' => 'Published second question', 'required' => true],
+                ],
+            ],
+        ]);
+        app(PublishQuizRevision::class)->handle($quiz, $user->id);
+        $quiz->update(['draft_definition' => [
+            'schema_version' => 1,
+            'blocks' => [
+                ['id' => 'q1', 'type' => 'question', 'question_type' => 'yes_no', 'label' => 'Draft first question', 'required' => true],
+                ['id' => 'page_break_1', 'type' => 'page_break'],
+                ['id' => 'q2', 'type' => 'question', 'question_type' => 'short_text', 'label' => 'Draft second question', 'required' => true],
+            ],
+        ]]);
+
+        $this->get(route('quizzes.show', $quiz))
+            ->assertOk()
+            ->assertSee('Page 1 of 1')
+            ->assertSee('Published first question')
+            ->assertSee('Published second question')
+            ->assertDontSee('Draft first question');
+        $this->assertDatabaseCount('submissions', 1);
+
+        $this->actingAs($user)
+            ->get(route('quizzes.draft-preview.show', $quiz))
+            ->assertOk()
+            ->assertSee('Draft preview')
+            ->assertSee('Page 1 of 2')
+            ->assertSee('Draft first question')
+            ->assertDontSee('Draft second question');
+        $this->assertDatabaseCount('submissions', 1);
+
+        $this->post(route('quizzes.draft-preview.save-page', [$quiz, 0]), [
+            'answers' => ['q1' => 'yes'],
+            'direction' => 'next',
+        ])->assertRedirect(route('quizzes.draft-preview.show', $quiz));
+
+        $this->get(route('quizzes.draft-preview.show', $quiz))
+            ->assertOk()
+            ->assertSee('Page 2 of 2')
+            ->assertSee('Draft second question')
+            ->assertDontSee('Draft first question');
+        $this->assertDatabaseCount('submissions', 1);
     }
 
     public function test_guests_cannot_open_draft_quizzes_but_authenticated_users_can_live_preview_them(): void
@@ -273,6 +327,80 @@ class AdminQuizBuilderAndRecoveryTest extends TestCase
         $this->assertSame('<p>Welcome to the assessment</p>', QuizForm::toFormState($quiz)['opening']['html']);
         $this->post('/readiness-assessment/unlock', ['password' => 'secret password'])->assertRedirect('/readiness-assessment');
         $this->get('/readiness-assessment')->assertOk()->assertSee('Welcome to the assessment')->assertSee('Begin now')->assertDontSee('How ready are you?');
+    }
+
+    public function test_quiz_persistence_serializes_virtual_form_sections_only_into_the_draft_definition(): void
+    {
+        $quiz = Quiz::factory()->create([
+            'name' => 'Abs assessment',
+            'slug' => 'abs-assessment',
+            'draft_definition' => [
+                'schema_version' => 1,
+                'blocks' => [
+                    ['id' => 'q1', 'type' => 'question', 'question_type' => 'yes_no', 'label' => 'Ready to begin?'],
+                    ['id' => 'q2', 'type' => 'question', 'question_type' => 'short_text', 'label' => 'What is your goal?'],
+                ],
+            ],
+        ]);
+
+        $persistenceData = QuizForm::toPersistenceData([
+            'name' => 'Abs assessment',
+            'slug' => 'abs-assessment',
+            'status' => 'draft',
+            'settings' => ['collect_name' => false],
+            'opening' => [
+                'html' => '<p>Welcome</p>',
+                'start_button_label' => 'Begin',
+                'hide_start_button' => false,
+            ],
+            'result' => ['mode' => 'ai', 'system_prompt' => 'Create a practical plan.'],
+            'score_results' => [],
+            'thank_you' => ['enabled' => true, 'html' => '<p>Thank you</p>'],
+            'builder_blocks' => [
+                ['type' => 'question', 'data' => ['id' => 'q1', 'question_type' => 'yes_no', 'label' => 'Ready to begin?']],
+                ['type' => 'page_break', 'data' => ['id' => 'manual-break']],
+                ['type' => 'question', 'data' => ['id' => 'q2', 'question_type' => 'short_text', 'label' => 'What is your goal?']],
+            ],
+        ]);
+
+        $this->assertSame([], array_intersect(
+            ['opening', 'result', 'score_results', 'thank_you', 'builder_blocks', 'password'],
+            array_keys($persistenceData),
+        ));
+
+        $quiz->update($persistenceData);
+
+        $definition = $quiz->fresh()->draft_definition;
+
+        $this->assertSame('<p>Welcome</p>', $definition['opening']['html']);
+        $this->assertSame('Create a practical plan.', $definition['result']['system_prompt']);
+        $this->assertSame('<p>Thank you</p>', $definition['thank_you']['html']);
+        $this->assertSame('manual-break', $definition['blocks'][1]['id']);
+    }
+
+    public function test_page_break_ids_are_generated_internally_and_remain_unique(): void
+    {
+        $definition = QuizForm::toDefinition([
+            'builder_blocks' => [
+                ['type' => 'question', 'data' => ['id' => 'page_break_1', 'question_type' => 'yes_no', 'label' => 'First question?']],
+                ['type' => 'page_break', 'data' => []],
+                ['type' => 'question', 'data' => ['id' => 'q2', 'question_type' => 'short_text', 'label' => 'Second question?']],
+                ['type' => 'page_break', 'data' => ['id' => 'page_break_2']],
+                ['type' => 'question', 'data' => ['id' => 'q3', 'question_type' => 'short_text', 'label' => 'Third question?']],
+                ['type' => 'page_break', 'data' => ['id' => 'existing-break']],
+                ['type' => 'question', 'data' => ['id' => 'q4', 'question_type' => 'short_text', 'label' => 'Fourth question?']],
+                ['type' => 'page_break', 'data' => ['id' => 'existing-break']],
+                ['type' => 'question', 'data' => ['id' => 'q5', 'question_type' => 'short_text', 'label' => 'Fifth question?']],
+                ['type' => 'page_break', 'data' => ['id' => 'not valid']],
+                ['type' => 'question', 'data' => ['id' => 'q6', 'question_type' => 'short_text', 'label' => 'Sixth question?']],
+            ],
+        ]);
+
+        $this->assertSame(
+            ['page_break_1', 'page_break_3', 'q2', 'page_break_2', 'q3', 'existing-break', 'q4', 'page_break_4', 'q5', 'page_break_5', 'q6'],
+            array_column($definition['blocks'], 'id'),
+        );
+        app(QuizDefinitionValidator::class)->validate($definition);
     }
 
     public function test_stale_processing_analysis_is_requeued_once_and_dispatched_without_creating_a_duplicate(): void

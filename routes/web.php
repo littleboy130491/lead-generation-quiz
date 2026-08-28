@@ -18,6 +18,10 @@ Route::post('/{quiz:slug}/unlock', [QuizController::class, 'unlock'])
     ->middleware('throttle:quiz-unlock')
     ->where('quiz', '^(?!admin$|webhooks$|up$|assets$|build$|storage$|livewire$|sanctum$).+')
     ->name('quizzes.unlock');
+Route::get('/{quiz:slug}/draft-preview', [QuizController::class, 'draftPreview'])
+    ->middleware(['auth', 'throttle:quiz-start'])
+    ->where('quiz', '^(?!admin$|webhooks$|up$|assets$|build$|storage$|livewire$|sanctum$).+')
+    ->name('quizzes.draft-preview.show');
 Route::post('/{quiz:slug}/draft-preview/opening', [QuizController::class, 'dismissDraftOpening'])
     ->middleware(['auth', 'throttle:quiz-progress'])
     ->where('quiz', '^(?!admin$|webhooks$|up$|assets$|build$|storage$|livewire$|sanctum$).+')
