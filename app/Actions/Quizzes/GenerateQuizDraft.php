@@ -10,6 +10,7 @@ use App\Models\Quiz;
 use App\Models\QuizDraftGeneration;
 use App\Settings\ApplicationSettings;
 use App\Support\RequestTimeLimit;
+use Closure;
 use Illuminate\Support\Facades\DB;
 
 class GenerateQuizDraft
@@ -21,8 +22,12 @@ class GenerateQuizDraft
         private QuizDefinitionPrompt $prompt,
     ) {}
 
-    public function handle(Quiz $quiz, array $brief): Quiz
-    {
+    public function handle(
+        Quiz $quiz,
+        array $brief,
+        ?Closure $beforePersist = null,
+        ?Closure $afterPersist = null,
+    ): Quiz {
         $brief = $this->safeBrief($brief);
         $prompts = $this->settings->get('prompts');
         $chain = $this->settings->get('ai.quiz');
@@ -42,13 +47,28 @@ class GenerateQuizDraft
             $definition = $this->generator->generate($brief, $chain, $systemPrompt);
             $this->validator->validate($definition);
 
-            DB::transaction(function () use ($quiz, $definition, $audit): void {
+            DB::transaction(function () use ($quiz, $definition, $audit, $beforePersist, $afterPersist): void {
+                if ($beforePersist !== null && ! $beforePersist()) {
+                    $audit->update([
+                        'status' => 'cancelled',
+                        'error_code' => 'cancelled_by_admin',
+                        'error_message' => 'Stopped by the administrator before draft persistence.',
+                        'cancelled_at' => now(),
+                    ]);
+
+                    return;
+                }
+
                 Quiz::query()->findOrFail($quiz->id)->update(['draft_definition' => $definition]);
                 $audit->update([
                     'status' => 'completed',
                     'result_hash' => hash('sha256', json_encode($definition, JSON_THROW_ON_ERROR)),
                     'completed_at' => now(),
                 ]);
+
+                if ($afterPersist !== null) {
+                    $afterPersist();
+                }
             });
         } catch (\Throwable $exception) {
             $audit->update([

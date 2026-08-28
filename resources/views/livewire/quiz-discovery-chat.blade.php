@@ -11,6 +11,8 @@
         .quiz-chat__header-actions { display:flex; align-items:center; gap:4px; }
         .quiz-chat__review { border:0; background:transparent; color:var(--qc-brand); padding:8px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
         .quiz-chat__review:hover { text-decoration:underline; }
+        .quiz-chat__create { min-height:38px; padding:0 13px; border:0; border-radius:10px; background:var(--qc-brand); color:#fff; font:inherit; font-size:13px; font-weight:750; cursor:pointer; white-space:nowrap; }
+        .quiz-chat__create:hover { background:var(--qc-brand-dark); }.quiz-chat__create:disabled{cursor:not-allowed;opacity:.55}
         .quiz-chat__stream { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:28px clamp(18px,4vw,64px); background:var(--qc-surface); }
         .quiz-chat__welcome { max-width:580px; margin:10vh auto 0; text-align:center; }
         .quiz-chat__welcome h2 { margin:0; font-size:clamp(25px,3vw,34px); letter-spacing:-.035em; line-height:1.12; }
@@ -44,7 +46,7 @@
         .quiz-chat__generation-copy strong { display:block; font-size:14px; }.quiz-chat__generation-copy span { display:block; margin-top:2px; color:var(--qc-muted); font-size:12px; }
         .quiz-chat__generation-spinner { width:20px; height:20px; flex:0 0 auto; border:2px solid rgb(217 119 6 / .25); border-top-color:var(--qc-brand); border-radius:999px; animation:quiz-chat-spin .65s linear infinite; }
         .quiz-chat__generation-link { display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:0 15px; border:0; border-radius:11px; background:var(--qc-brand); color:#fff; font:inherit; font-size:13px; font-weight:750; text-decoration:none; cursor:pointer; white-space:nowrap; }
-        .quiz-chat__generation-link:hover { background:var(--qc-brand-dark); }.quiz-chat__generation--failed{background:#fff5f5}.quiz-chat__generation--complete{background:#f0fdf4}
+        .quiz-chat__generation-link:hover { background:var(--qc-brand-dark); }.quiz-chat__generation-link:disabled{cursor:not-allowed;opacity:.6}.quiz-chat__generation-stop{border:1px solid #dc2626;background:#fff;color:#b91c1c}.quiz-chat__generation-stop:hover{background:#fef2f2}.quiz-chat__generation--failed{background:#fff5f5}.quiz-chat__generation--cancelled{background:#f8fafc}.quiz-chat__generation--complete{background:#f0fdf4}
         @media (max-width:640px){.quiz-chat__shell{height:calc(100dvh - 7rem);min-height:0;max-height:calc(100dvh - 7rem);border-radius:16px}.quiz-chat__header{padding:14px 16px}.quiz-chat__stream{padding:18px 14px}.quiz-chat__composer{padding:12px 14px}.quiz-chat__send{min-width:auto;padding:0 14px}.quiz-chat__bubble{max-width:90%;font-size:14px}.quiz-chat__welcome{margin-top:6vh}.quiz-chat__fields{grid-template-columns:1fr}.quiz-chat__field--wide{grid-column:auto}.quiz-chat__brief{padding:20px}.quiz-chat__generation{align-items:flex-start;flex-direction:column}}
     </style>
 
@@ -90,7 +92,7 @@
                 <div class="quiz-chat__header-actions">
                     <button class="quiz-chat__review" type="button" wire:click="startNewInterview" @disabled($generationStatus === 'generating')>New interview</button>
                     @if (in_array($generationStatus, ['interviewing', 'ready'], true))
-                        <button class="quiz-chat__review" type="button" wire:click="executeNow" wire:loading.attr="disabled">Create quiz now</button>
+                        <button class="quiz-chat__create" type="button" wire:click="executeNow" wire:loading.attr="disabled">Create quiz now</button>
                     @endif
                     <button class="quiz-chat__review" type="button" wire:click="$toggle('showBrief')" @disabled($generationStatus === 'generating')>{{ $showBrief ? 'Back to chat' : 'Review brief' }}</button>
                 </div>
@@ -132,6 +134,7 @@
         @if ($generationStatus === 'generating')
             <aside class="quiz-chat__generation" aria-live="polite">
                 <div class="quiz-chat__generation-copy"><span class="quiz-chat__generation-spinner" aria-hidden="true"></span><div><strong>Generating your quiz draft</strong><span>You can leave this chat and come back. The AI worker will continue in the background.</span></div></div>
+                <button class="quiz-chat__generation-link quiz-chat__generation-stop" type="button" wire:click="stopGeneration" wire:loading.attr="disabled" wire:target="stopGeneration"><span wire:loading.remove wire:target="stopGeneration">Stop generation</span><span wire:loading wire:target="stopGeneration">Stopping…</span></button>
             </aside>
         @elseif ($generationStatus === 'generated' && $generatedQuizUrl)
             <aside class="quiz-chat__generation quiz-chat__generation--complete" aria-live="polite">
@@ -141,6 +144,11 @@
         @elseif ($generationStatus === 'failed')
             <aside class="quiz-chat__generation quiz-chat__generation--failed" aria-live="polite">
                 <div class="quiz-chat__generation-copy"><div><strong>Generation could not be completed</strong><span>Your brief and conversation are safe. Retry when the provider is available.</span></div></div>
+                <button class="quiz-chat__generation-link" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Try again</button>
+            </aside>
+        @elseif ($generationStatus === 'cancelled')
+            <aside class="quiz-chat__generation quiz-chat__generation--cancelled" aria-live="polite">
+                <div class="quiz-chat__generation-copy"><div><strong>Generation stopped</strong><span>Your brief and conversation are safe. You can retry whenever you are ready.</span></div></div>
                 <button class="quiz-chat__generation-link" type="button" wire:click="generateDraft" wire:loading.attr="disabled">Try again</button>
             </aside>
         @endif

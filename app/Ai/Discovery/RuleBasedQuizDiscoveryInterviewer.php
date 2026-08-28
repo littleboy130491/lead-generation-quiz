@@ -18,7 +18,7 @@ class RuleBasedQuizDiscoveryInterviewer implements QuizDiscoveryInterviewer
             if (QuizDiscoveryBrief::hasEnoughContext($brief)) {
                 return [
                     'brief' => $brief,
-                    'message' => 'I have enough to create a draft. Generating the quiz now.',
+                    'message' => QuizDiscoveryPrompt::GENERATION_REQUESTED_MESSAGE,
                     'action' => 'generate',
                 ];
             }
@@ -41,7 +41,7 @@ class RuleBasedQuizDiscoveryInterviewer implements QuizDiscoveryInterviewer
         if ($field === null) {
             return [
                 'brief' => $brief,
-                'message' => 'Thanks — I have the core context. I will create an editable quiz draft now.',
+                'message' => QuizDiscoveryPrompt::READY_MESSAGE,
                 'action' => 'generate',
             ];
         }

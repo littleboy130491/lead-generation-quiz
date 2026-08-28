@@ -3,7 +3,9 @@
 namespace App\Livewire;
 
 use App\Actions\Quizzes\RunQuizDiscovery;
+use App\Actions\Quizzes\StopQuizDraftGeneration;
 use App\Ai\Discovery\QuizDiscoveryBrief;
+use App\Ai\Discovery\QuizDiscoveryIntent;
 use App\Enums\QuizDiscoveryStatus;
 use App\Enums\QuizStatus;
 use App\Filament\Resources\Quizzes\Pages\EditQuiz;
@@ -46,6 +48,7 @@ class QuizDiscoveryChat extends Component
                 QuizDiscoveryStatus::Generating,
                 QuizDiscoveryStatus::Generated,
                 QuizDiscoveryStatus::Failed,
+                QuizDiscoveryStatus::Cancelled,
             ]);
         if ($this->originQuizId !== null) {
             $query->where('quiz_id', $this->originQuizId);
@@ -84,7 +87,6 @@ class QuizDiscoveryChat extends Component
         }
         $this->loadSession($session->fresh(['messages']) ?? $session);
         $this->reset('opening');
-        $this->generateIfReady();
     }
 
     public function sendReply(?string $message = null): void
@@ -99,9 +101,13 @@ class QuizDiscoveryChat extends Component
             return;
         }
 
+        $wantsImmediateGeneration = QuizDiscoveryIntent::wantsImmediateGeneration($this->reply);
         $this->loadSession(app(RunQuizDiscovery::class)->reply($session, $this->reply));
         $this->reset('reply');
-        $this->generateIfReady();
+
+        if ($wantsImmediateGeneration && $this->session()?->status === QuizDiscoveryStatus::Ready) {
+            $this->generateDraft();
+        }
     }
 
     public function executeNow(): void
@@ -112,7 +118,7 @@ class QuizDiscoveryChat extends Component
     public function saveBrief(): void
     {
         $session = $this->session();
-        if ($session === null || ! in_array($session->status, [QuizDiscoveryStatus::Interviewing, QuizDiscoveryStatus::Ready, QuizDiscoveryStatus::Failed], true)) {
+        if ($session === null || ! in_array($session->status, [QuizDiscoveryStatus::Interviewing, QuizDiscoveryStatus::Ready, QuizDiscoveryStatus::Failed, QuizDiscoveryStatus::Cancelled], true)) {
             return;
         }
 
@@ -137,6 +143,7 @@ class QuizDiscoveryChat extends Component
 
         try {
             $quiz = $this->quizForGeneration($brief);
+            $executionToken = (string) Str::uuid();
             $claimed = QuizDiscoverySession::query()
                 ->whereKey($session->id)
                 ->where('user_id', auth()->id())
@@ -144,12 +151,13 @@ class QuizDiscoveryChat extends Component
                     QuizDiscoveryStatus::Interviewing,
                     QuizDiscoveryStatus::Ready,
                     QuizDiscoveryStatus::Failed,
+                    QuizDiscoveryStatus::Cancelled,
                 ])
                 ->update([
                     'quiz_id' => $quiz->id,
                     'brief' => $brief,
                     'status' => QuizDiscoveryStatus::Generating,
-                    'generation_token' => null,
+                    'generation_token' => $executionToken,
                     'generation_started_at' => null,
                     'generation_finished_at' => null,
                     'generation_error_code' => null,
@@ -164,16 +172,16 @@ class QuizDiscoveryChat extends Component
             }
 
             $session = $session->fresh(['messages']) ?? $session;
-            if ($session->messages->last()?->content !== RunQuizDiscovery::READY_MESSAGE) {
+            if ($session->messages->last()?->content !== RunQuizDiscovery::GENERATION_REQUESTED_MESSAGE) {
                 $session->messages()->create([
                     'role' => 'assistant',
-                    'content' => RunQuizDiscovery::READY_MESSAGE,
+                    'content' => RunQuizDiscovery::GENERATION_REQUESTED_MESSAGE,
                     'brief_snapshot' => $brief,
                 ]);
             }
             $this->quizId = $quiz->id;
             $this->loadSession($session->fresh(['messages']) ?? $session);
-            GenerateQuizDraftJob::dispatch($session->id);
+            GenerateQuizDraftJob::dispatch($session->id, $executionToken);
         } catch (\Throwable $exception) {
             report($exception);
             $session->update([
@@ -197,6 +205,19 @@ class QuizDiscoveryChat extends Component
         }
     }
 
+    public function stopGeneration(): void
+    {
+        $session = $this->session();
+        if ($session === null) {
+            return;
+        }
+
+        $stopped = app(StopQuizDraftGeneration::class)->handle($session->id, (int) auth()->id());
+        if ($stopped !== null) {
+            $this->loadSession($stopped);
+        }
+    }
+
     public function pollGeneration(): void
     {
         $session = $this->session();
@@ -217,13 +238,6 @@ class QuizDiscoveryChat extends Component
             ->where('user_id', auth()->id())
             ->with('messages')
             ->first();
-    }
-
-    private function generateIfReady(): void
-    {
-        if ($this->session()?->status === QuizDiscoveryStatus::Ready) {
-            $this->generateDraft();
-        }
     }
 
     /**

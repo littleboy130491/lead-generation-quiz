@@ -20,7 +20,9 @@ class RunQuizDiscovery
      */
     public const HISTORY_TURNS = 12;
 
-    public const READY_MESSAGE = 'I have enough context. I’m generating your editable quiz draft now.';
+    public const READY_MESSAGE = QuizDiscoveryPrompt::READY_MESSAGE;
+
+    public const GENERATION_REQUESTED_MESSAGE = QuizDiscoveryPrompt::GENERATION_REQUESTED_MESSAGE;
 
     public function __construct(
         private QuizDiscoveryInterviewer $interviewer,
@@ -65,7 +67,7 @@ class RunQuizDiscovery
         if (QuizDiscoveryIntent::wantsImmediateGeneration($message)) {
             $ready = QuizDiscoveryBrief::hasEnoughContext($brief);
             $assistantMessage = $ready
-                ? self::READY_MESSAGE
+                ? self::GENERATION_REQUESTED_MESSAGE
                 : 'Tell me a bit more about the quiz you want before I create it. What is the core idea?';
             $session->update([
                 'brief' => $brief,
@@ -99,20 +101,16 @@ class RunQuizDiscovery
             : 'continue';
         $assistantMessage = (string) $response['message'];
 
-        // A complete brief ends the interview even when the model asks another
-        // question, so a finished interview cannot stall on confirmation.
-        if ($action === 'continue' && QuizDiscoveryBrief::isReady($brief)) {
-            $action = 'generate';
-            $assistantMessage = self::READY_MESSAGE;
-        }
         if ($action === 'generate' && ! QuizDiscoveryBrief::hasEnoughContext($brief)) {
             $action = 'continue';
             $assistantMessage = 'Tell me a bit more about the quiz you want before I create it. What is the core idea?';
         }
 
+        $ready = $action === 'generate' || QuizDiscoveryBrief::isReady($brief);
+
         $session->update([
             'brief' => $brief,
-            'status' => $action === 'generate' ? QuizDiscoveryStatus::Ready : QuizDiscoveryStatus::Interviewing,
+            'status' => $ready ? QuizDiscoveryStatus::Ready : QuizDiscoveryStatus::Interviewing,
         ]);
         $session->messages()->create([
             'role' => 'assistant',

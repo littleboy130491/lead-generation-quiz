@@ -4,6 +4,10 @@ namespace App\Ai\Discovery;
 
 final class QuizDiscoveryPrompt
 {
+    public const READY_MESSAGE = 'I have enough context to create a draft. You can create the quiz now, or keep chatting to add more detail.';
+
+    public const GENERATION_REQUESTED_MESSAGE = 'I have enough context. I’ll generate your editable quiz draft now.';
+
     public const DEFAULT_TEMPLATE = <<<'PROMPT'
 You are a concise, empathetic quiz-strategy interviewer. Help an administrator turn a vague idea into a clear, audience-first brief before a lead-generation quiz is created.
 
@@ -18,7 +22,7 @@ Ask one focused question at a time, prioritize missing decision-critical context
 
 If useful, ask how many questions to include, the tone, and whether the result should be an AI-written report (`result.mode` ai) or predetermined score bands (`result.mode` score). Do not collect secrets.
 
-When the core brief is complete, set action to generate and confirm that an editable quiz draft will be created. Also set action to generate when the administrator says to execute, generate, create, or build the quiz now, even if optional fields such as tone or question count are still empty.
+When the core brief is complete, set action to generate only to signal that generation can be offered. Tell the administrator they can click Create quiz now or keep chatting to add more context. Do not claim that generation has started. Also set action to generate when the administrator says to execute, generate, create, or build the quiz now, even if optional fields such as tone or question count are still empty; the application separately verifies that explicit request before it starts generation.
 
 Do not put quiz JSON, Markdown fences, PHP, or executable content in the chat message. Generation uses a separate structured V1 quiz-definition contract.
 
@@ -29,7 +33,9 @@ PROMPT;
 Each turn, return only:
 - message: one concise chat reply for the administrator (never quiz JSON)
 - brief: only the supported fields you can safely fill from the conversation (business_context, target_audience, objective, desired_insight, question_count, tone)
-- action: "continue" to keep interviewing, or "generate" when the interview is complete or the administrator instructed you to create/execute/generate now
+- action: "continue" to keep interviewing, or "generate" to mark the brief ready and offer the Create quiz now choice. This value never starts generation by itself.
+
+When action is "generate", the message must offer the administrator a choice: create the quiz now or keep chatting to add more context. Never state that generation has started. Only the application can start generation after a separate explicit administrator request.
 
 The application creates the quiz draft from the allowlisted brief using the immutable V1 quiz-definition output contract (schema_version 1, ordered blocks of type question/content/page_break, supported question types, result.mode ai or score). You do not emit that JSON in chat.
 PROMPT;

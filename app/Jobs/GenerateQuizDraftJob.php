@@ -34,9 +34,9 @@ class GenerateQuizDraftJob implements ShouldQueue
         $claimed = QuizDiscoverySession::query()
             ->whereKey($this->sessionId)
             ->where('status', QuizDiscoveryStatus::Generating)
-            ->whereNull('generation_token')
+            ->where('generation_token', $this->executionToken)
+            ->whereNull('generation_started_at')
             ->update([
-                'generation_token' => $this->executionToken,
                 'generation_started_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -52,8 +52,43 @@ class GenerateQuizDraftJob implements ShouldQueue
                 throw new \RuntimeException('The quiz for this interview could not be found.');
             }
 
-            $generateDraft->handle($session->quiz, $session->brief ?? []);
-            $this->complete();
+            $activeSession = null;
+            $generateDraft->handle(
+                $session->quiz,
+                $session->brief ?? [],
+                beforePersist: function () use (&$activeSession): bool {
+                    $claimed = QuizDiscoverySession::query()
+                        ->whereKey($this->sessionId)
+                        ->where('status', QuizDiscoveryStatus::Generating)
+                        ->where('generation_token', $this->executionToken)
+                        ->update(['updated_at' => now()]);
+
+                    if ($claimed !== 1) {
+                        return false;
+                    }
+
+                    $activeSession = QuizDiscoverySession::query()->findOrFail($this->sessionId);
+
+                    return true;
+                },
+                afterPersist: function () use (&$activeSession): void {
+                    if ($activeSession === null) {
+                        throw new \LogicException('The quiz generation session was not claimed for completion.');
+                    }
+
+                    $activeSession->update([
+                        'status' => QuizDiscoveryStatus::Generated,
+                        'generation_finished_at' => now(),
+                        'generation_error_code' => null,
+                        'generation_error_message' => null,
+                    ]);
+                    $activeSession->messages()->create([
+                        'role' => 'assistant',
+                        'content' => 'Your quiz draft is ready. Review it and make any changes before publishing.',
+                        'brief_snapshot' => $activeSession->brief,
+                    ]);
+                },
+            );
         } catch (\Throwable $exception) {
             report($exception);
             $this->failSession($exception);
@@ -63,34 +98,6 @@ class GenerateQuizDraftJob implements ShouldQueue
     public function failed(?\Throwable $exception): void
     {
         $this->failSession($exception ?? new \RuntimeException('The generation worker stopped unexpectedly.'));
-    }
-
-    private function complete(): void
-    {
-        DB::transaction(function (): void {
-            $session = QuizDiscoverySession::query()
-                ->whereKey($this->sessionId)
-                ->where('status', QuizDiscoveryStatus::Generating)
-                ->where('generation_token', $this->executionToken)
-                ->lockForUpdate()
-                ->first();
-
-            if ($session === null) {
-                return;
-            }
-
-            $session->update([
-                'status' => QuizDiscoveryStatus::Generated,
-                'generation_finished_at' => now(),
-                'generation_error_code' => null,
-                'generation_error_message' => null,
-            ]);
-            $session->messages()->create([
-                'role' => 'assistant',
-                'content' => 'Your quiz draft is ready. Review it and make any changes before publishing.',
-                'brief_snapshot' => $session->brief,
-            ]);
-        });
     }
 
     private function failSession(\Throwable $exception): void

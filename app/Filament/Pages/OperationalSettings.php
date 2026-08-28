@@ -98,7 +98,7 @@ class OperationalSettings extends Page
                     TextInput::make('prompts.discovery_version')->label('Discovery prompt version')->required()->maxLength(60)->regex('/^[a-z0-9._-]{1,60}$/i')
                         ->helperText('Label snapshotted with each AI quiz-discovery interview.'),
                     Textarea::make('prompts.discovery_template')->label('Quiz discovery interview system prompt')->rows(10)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()
-                        ->helperText('Instructions used by the guided AI interview. When the interview is complete or the administrator says to create the quiz now, generation uses the allowlisted brief and the immutable V1 quiz-definition contract.'),
+                        ->helperText('Instructions used by the guided AI interview. A complete brief offers Create quiz now but does not generate until the administrator explicitly requests it; generation then uses the allowlisted brief and immutable V1 contract.'),
                     Textarea::make('prompts.quiz_template')->label('Quiz creation system prompt')->rows(12)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()
                         ->helperText('Instructions used when the AI interview (or the generation API) creates a quiz definition. Combined with built-in draft-only safety rules and the V1 output contract.'),
                     Textarea::make('prompts.report_template')->label('Analysis result system prompt')->rows(12)->maxLength(10000)->rules(['not_regex:/<\?/i'])->columnSpanFull()

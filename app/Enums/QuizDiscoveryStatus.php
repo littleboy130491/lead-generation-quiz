@@ -9,5 +9,6 @@ enum QuizDiscoveryStatus: string
     case Generating = 'generating';
     case Generated = 'generated';
     case Failed = 'failed';
+    case Cancelled = 'cancelled';
     case Abandoned = 'abandoned';
 }

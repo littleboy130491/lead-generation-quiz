@@ -34,6 +34,7 @@ class QuizDraftGeneration extends Model
             'requested_at' => 'datetime',
             'completed_at' => 'datetime',
             'failed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
