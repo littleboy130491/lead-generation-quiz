@@ -3,6 +3,7 @@
 namespace App\Actions\Quizzes;
 
 use App\Ai\Contracts\QuizDefinitionGenerator;
+use App\Ai\Data\QuizDefinitionPageBreakNormalizer;
 use App\Ai\GenerationException;
 use App\Ai\Prompt\QuizDefinitionPrompt;
 use App\Domain\Quiz\Validation\QuizDefinitionValidator;
@@ -48,7 +49,9 @@ class GenerateQuizDraft
         ]);
 
         try {
-            $definition = $this->generator->generate($brief, $chain, $systemPrompt);
+            $definition = QuizDefinitionPageBreakNormalizer::normalize(
+                $this->generator->generate($brief, $chain, $systemPrompt),
+            );
             $this->validator->validate($definition);
 
             DB::transaction(function () use ($quiz, $definition, $audit, $beforePersist, $afterPersist): void {

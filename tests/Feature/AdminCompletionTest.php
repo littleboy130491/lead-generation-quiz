@@ -65,6 +65,32 @@ class AdminCompletionTest extends TestCase
         $this->assertSame(0, $quiz->revisions()->count());
     }
 
+    public function test_ai_generation_repairs_invalid_page_break_boundaries_before_validation(): void
+    {
+        $quiz = Quiz::factory()->create(['draft_definition' => ['schema_version' => 1, 'blocks' => []]]);
+        app()->instance(QuizDefinitionGenerator::class, new class implements QuizDefinitionGenerator
+        {
+            public function generate(array $brief, array $chain, string $systemPrompt): array
+            {
+                return [
+                    'schema_version' => 1,
+                    'blocks' => [
+                        ['id' => 'leading', 'type' => 'page_break'],
+                        ['id' => 'q1', 'type' => 'question', 'question_type' => 'yes_no', 'label' => 'First question?'],
+                        ['id' => 'kept', 'type' => 'page_break'],
+                        ['id' => 'duplicate', 'type' => 'page_break'],
+                        ['id' => 'q2', 'type' => 'question', 'question_type' => 'short_text', 'label' => 'Second question?'],
+                        ['id' => 'trailing', 'type' => 'page_break'],
+                    ],
+                ];
+            }
+        });
+
+        app(GenerateQuizDraft::class)->handle($quiz, ['business_context' => 'A useful assessment.']);
+
+        $this->assertSame(['q1', 'kept', 'q2'], array_column($quiz->fresh()->draft_definition['blocks'], 'id'));
+    }
+
     public function test_application_settings_default_to_the_quiz_generation_template(): void
     {
         $this->assertSame(
